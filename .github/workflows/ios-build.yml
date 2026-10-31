@@ -1,37 +1,40 @@
-name: iOS build validation (Veepoo Bridge)
+name: iOS source and device build verification
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'VeepooHealthBridge_v0_2_source.zip'
+      - 'Sources/**'
+      - 'project.yml'
+      - 'Info.plist'
+      - 'VeepooHealthBridge.entitlements'
       - '.github/workflows/ios-build.yml'
 permissions:
   contents: read
 jobs:
-  simulator-build:
+  build:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - name: Extract Swift source
-        run: |
-          unzip -q VeepooHealthBridge_v0_2_source.zip -d extracted
-          test -f extracted/VeepooHealthBridge_v0_2/project.yml
-      - name: Show Xcode environment
-        run: xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
-      - name: Compile iOS simulator without signing
-        working-directory: extracted/VeepooHealthBridge_v0_2
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build simulator
         run: |
-          xcodegen generate
           set -o pipefail
-          xcodebuild -project VeepooHealthBridge.xcodeproj -scheme VeepooHealthBridge -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
-      - name: Upload build log
+          xcodebuild -project VeepooHealthBridge.xcodeproj -scheme VeepooHealthBridge -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$PWD/derived" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-simulator.log
+      - name: Build physical device (unsigned compile check)
+        run: |
+          set -o pipefail
+          xcodebuild -project VeepooHealthBridge.xcodeproj -scheme VeepooHealthBridge -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$PWD/derived" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-device.log
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-log
-          path: extracted/VeepooHealthBridge_v0_2/xcodebuild.log
+          name: ios-build-results
+          path: |
+            build-simulator.log
+            build-device.log
           if-no-files-found: ignore
