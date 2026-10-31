@@ -37,6 +37,10 @@ struct ContentView: View {
                     Button("Leer historial con SDK (diagnóstico)") { veepoo.readHistoryDiagnostic() }
                     Text(veepoo.historyStatus).font(.caption)
                     Button("Inspeccionar datos guardados por SDK") { veepoo.inspectSDKDatabase() }
+                    Button("Extraer pulsaciones a vista previa local") { veepoo.extractHeartRatePreview() }
+                    Button("Guardar vista previa sin validar") { measurements.addSDKPreview(veepoo.extractedMeasurements) }
+                        .disabled(veepoo.extractedMeasurements.isEmpty)
+                    Text("Muestras extraídas: \(veepoo.extractedMeasurements.count). No se envían a Salud sin verificación.")
                     ForEach(veepoo.databaseSummary, id: \.self) { Text($0).font(.caption) }
                     ForEach(Array(veepoo.discovered.enumerated()), id: \.offset) { index, label in
                         Button("Conectar Veepoo: " + label) { veepoo.connect(index: index) }
