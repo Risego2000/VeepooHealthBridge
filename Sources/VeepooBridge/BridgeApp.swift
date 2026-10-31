@@ -36,6 +36,8 @@ struct ContentView: View {
                     Button("Buscar con SDK Veepoo") { veepoo.scan() }
                     Button("Leer historial con SDK (diagnóstico)") { veepoo.readHistoryDiagnostic() }
                     Text(veepoo.historyStatus).font(.caption)
+                    Button("Inspeccionar datos guardados por SDK") { veepoo.inspectSDKDatabase() }
+                    ForEach(veepoo.databaseSummary, id: \.self) { Text($0).font(.caption) }
                     ForEach(Array(veepoo.discovered.enumerated()), id: \.offset) { index, label in
                         Button("Conectar Veepoo: " + label) { veepoo.connect(index: index) }
                     }
