@@ -7,6 +7,7 @@ on:
       - '.github/workflows/veepoo-device-sdk.yml'
       - 'Sources/**'
       - 'codemagic.yaml'
+      - 'project.yml'
 permissions:
   contents: read
 jobs:
@@ -56,6 +57,15 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -workspace VeepooHealthBridge.xcworkspace -scheme VeepooHealthBridge -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build 2>&1 | tee vendor-device-build.log
+      - name: Validate privacy usage descriptions in built app
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/Build/Products/Debug-iphoneos/VeepooHealthBridge.app' -type d -print -quit)
+          test -n "$APP"
+          for key in NSBluetoothAlwaysUsageDescription NSHealthShareUsageDescription NSHealthUpdateUsageDescription; do
+            /usr/libexec/PlistBuddy -c "Print :$key" "$APP/Info.plist"
+          done
       - name: Create unsigned IPA artifact
         shell: bash
         run: |
