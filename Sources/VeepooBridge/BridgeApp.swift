@@ -114,7 +114,7 @@ struct DashboardView: View {
             HStack {
                 activityValue("Calorías", kind: .activeEnergyKcal, unit: "kcal")
                 Divider().frame(height: 35)
-                VStack(spacing: 5) { Text("Pasos").font(.caption).foregroundStyle(.secondary); Text(steps > 0 ? steps.formatted(.number.precision(.fractionLength(0))) : "—").font(.headline) }.frame(maxWidth: .infinity)
+                VStack(spacing: 5) { Text("Pasos").font(.caption).foregroundStyle(.secondary); Text(today.contains(where: { $0.kind == .steps }) ? steps.formatted(.number.precision(.fractionLength(0))) : "—").font(.headline) }.frame(maxWidth: .infinity)
                 Divider().frame(height: 35)
                 activityValue("Distancia", kind: .walkingRunningMeters, unit: "km")
             }
@@ -244,6 +244,20 @@ struct CardiacDataView: View {
                 if let url = veepoo.archiveURL {
                     Button("Examinar trazados e intervalos originales") { archive = true }
                     ShareLink("Compartir archivo original", item: url)
+                }
+            }
+            Section("Trazados recibidos") {
+                if veepoo.ecgPreviews.isEmpty {
+                    Text("Sin trazados descargados. Conecta el reloj y prepara su archivo original.").foregroundStyle(.secondary)
+                }
+                ForEach(veepoo.ecgPreviews.prefix(12)) { trace in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(trace.label).font(.headline)
+                        Chart(Array(trace.samples.enumerated()), id: \.offset) { point in
+                            LineMark(x: .value(trace.sampleRate == nil ? "Muestra" : "Segundos", Double(point.offset) / (trace.sampleRate ?? 1)), y: .value("Unidades del SDK", point.element))
+                        }.frame(height: 150).foregroundStyle(.pink)
+                        Text("Vista previa: hasta 2000 muestras originales, sin calibración clínica. El archivo conserva los datos completos.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             Section("VFC · método de cálculo") {

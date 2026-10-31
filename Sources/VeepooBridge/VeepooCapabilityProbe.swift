@@ -5,6 +5,13 @@ import Combine
 import VeepooBleSDK
 #endif
 
+struct ECGTracePreview: Identifiable {
+    let id: String
+    let label: String
+    let samples: [Double]
+    let sampleRate: Double?
+}
+
 /// Diagnostic bridge to vendor APIs. It only reports verified device feature flags.
 /// It never fabricates measurements or writes to HealthKit.
 @MainActor
@@ -20,6 +27,7 @@ final class VeepooCapabilityProbe: ObservableObject {
     @Published private(set) var ready = false
     @Published private(set) var reading = false
     @Published private(set) var archiveURL: URL?
+    @Published private(set) var ecgPreviews: [ECGTracePreview] = []
     private var operationID = UUID()
     @Published var automaticReconnect = UserDefaults.standard.object(forKey: "automaticReconnect") as? Bool ?? true {
         didSet {
@@ -104,6 +112,7 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
         connectionWanted = true
         ready = false
+        ecgPreviews = []
         extractedMeasurements = []
         databaseSummary = []
         manager?.veepooSDKStopScanDevice()
@@ -139,7 +148,7 @@ final class VeepooCapabilityProbe: ObservableObject {
         disconnect()
         do {
             if FileManager.default.fileExists(atPath: manualFileURL.path) { try FileManager.default.removeItem(at: manualFileURL) }
-            manualRecords = [:]; archiveURL = nil
+            manualRecords = [:]; archiveURL = nil; ecgPreviews = []
             return true
         } catch { historyStatus = "No se pudo borrar el archivo manual: \(error.localizedDescription)"; return false }
     }
@@ -250,6 +259,19 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
     }
 
+    private func collectECGPreviews(_ models: [VPECGTestDataModel], address: String) {
+        for model in models {
+            let values = (model.filterSignals ?? []).prefix(2000).compactMap { ($0 as? NSNumber)?.doubleValue }
+            guard !values.isEmpty, values.allSatisfy(\.isFinite) else { continue }
+            let label = (model.date ?? "") + " " + (model.testTime ?? "")
+            let id = address + "-" + label + "-" + (model.type ?? "")
+            guard !ecgPreviews.contains(where: { $0.id == id }), ecgPreviews.count < 40 else { continue }
+            let rawRate = Double(model.uploadFrequency ?? "")
+            let rate = rawRate.flatMap { (1...2000).contains($0) ? $0 : nil }
+            ecgPreviews.append(ECGTracePreview(id: id, label: label, samples: values, sampleRate: rate))
+        }
+    }
+
     /// KVC keys are an explicit allowlist of public properties in the pinned SDK headers.
     /// Values are preserved without inferring clinical units or invoking a vendor diagnosis.
     private func snapshot(_ model: NSObject, keys: [String]) -> [String: Any] {
@@ -288,6 +310,7 @@ final class VeepooCapabilityProbe: ObservableObject {
                 "subcutaneousFat", "bodyMoisture", "waterContent", "skeletalMuscleRate", "boneMass",
                 "proportionOfProtein", "proteinAmount", "basalMetabolicRate"]) }
             let ecgs = VPDataBaseOperation.veepooSDKGetDeviceOffStoreECG(withDate: day, andTableID: address) ?? []
+            collectECGPreviews(ecgs, address: address)
             let traces = ecgs.map { snapshot($0, keys: [
                 "type", "ecgType", "date", "testTime", "duration", "mac", "state", "aveHeart", "aveHrv",
                 "aveResRate", "aveQT", "avePWV", "originalSignals", "filterSignals", "hearts", "hrvs",
