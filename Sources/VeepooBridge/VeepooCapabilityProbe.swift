@@ -20,8 +20,9 @@ final class VeepooCapabilityProbe: ObservableObject {
     @Published private(set) var reading = false
     @Published private(set) var archiveURL: URL?
     private var operationID = UUID()
-    @Published var automaticReconnect = true {
+    @Published var automaticReconnect = UserDefaults.standard.object(forKey: "automaticReconnect") as? Bool ?? true {
         didSet {
+            UserDefaults.standard.set(automaticReconnect, forKey: "automaticReconnect")
             #if canImport(VeepooBleSDK)
             manager?.automaticConnection = automaticReconnect
             #endif
@@ -71,14 +72,18 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
     }
 
-    func connect(index: Int) {
+    func connect(index: Int, password: String = "0000") {
         guard models.indices.contains(index) else { status = "Selecciona un dispositivo válido"; return }
+        guard password.count == 4, password.allSatisfy({ $0.isASCII && $0.isNumber }) else {
+            status = "La contraseña debe tener cuatro cifras"; return
+        }
         ready = false
         extractedMeasurements = []
         databaseSummary = []
         manager?.veepooSDKStopScanDevice()
         manager?.automaticConnection = automaticReconnect
         let device = models[index]
+        device.devicePassword = password
         status = "Conectando mediante SDK Veepoo"
         guard let manager else { status = "Gestor Veepoo no inicializado"; return }
         manager.veepooSDKConnectDevice(device) { [weak self] state in
@@ -102,6 +107,17 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
     }
 
+    func supports(_ category: String) -> Bool {
+        guard ready, let model = manager?.peripheralModel else { return false }
+        switch category {
+        case "oxygen": return model.oxygenType > 0
+        case "hrv": return model.hrvType > 0
+        case "temperature": return model.temperatureType > 0
+        case "activity": return model.runningSaveTimes > 0
+        default: return true
+        }
+    }
+
     func readHistoryDiagnostic() { readHistory(category: "basic") }
 
     func readHistory(category: String) {
@@ -110,6 +126,7 @@ final class VeepooCapabilityProbe: ObservableObject {
             historyStatus = "Conecta y autentica el reloj; espera a terminar la operación actual."
             return
         }
+        guard supports(category) else { historyStatus = "El reloj no anuncia esta capacidad"; return }
         reading = true
         extractedMeasurements = []
         let token = UUID()
@@ -152,7 +169,7 @@ final class VeepooCapabilityProbe: ObservableObject {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = recordingTimeZone
         var days: [[String: Any]] = []
-        for offset in 0..<max(1, min(30, Int(manager?.peripheralModel?.saveDays ?? 0) + 1)) {
+        for offset in 0..<max(1, min(256, Int(manager?.peripheralModel?.saveDays ?? 0) + 1)) {
             guard let instant = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
             let day = formatter.string(from: instant)
             let accurate = VPDataBaseOperation.veepooSDKGetAccurateSleepData(withDate: day, andTableID: address) ?? []
@@ -230,7 +247,7 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
         guard ready, !reading else { historyStatus = "Espera a la autenticación y a finalizar la lectura"; return }
         let decoder = VendorHistoryDecoder(device: address, timeZone: recordingTimeZone)
-        let days = max(1, min(30, Int(manager?.peripheralModel?.saveDays ?? 0) + 1))
+        let days = max(1, min(256, Int(manager?.peripheralModel?.saveDays ?? 0) + 1))
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = recordingTimeZone
@@ -252,6 +269,21 @@ final class VeepooCapabilityProbe: ObservableObject {
             }
             if let rows = VPDataBaseOperation.veepooSDKGetDeviceTemperatureData(withDate: day, andTableID: address) as? [[String: Any]] {
                 output += decoder.temperature(day: day, rows: rows)
+            }
+            if let models = VPDataBaseOperation.veepooSDKGetDeviceOffStoreBodyComposition(withDate: day, andTableID: address) {
+                let rows: [[String: Any]] = models.map { model in
+                    ["date": model.date, "testTime": model.testTime,
+                     "bodyFatPercentage": model.bodyFatPercentage, "leanBodyMass": model.leanBodyMass]
+                }
+                output += decoder.bodyComposition(rows: rows)
+            }
+            if manager?.peripheralModel?.sleepType == 1,
+               let models = VPDataBaseOperation.veepooSDKGetAccurateSleepData(withDate: day, andTableID: address) {
+                let rows: [[String: Any]] = models.map { model in
+                    ["sleepTime": model.sleepTime, "wakeTime": model.wakeTime,
+                     "onePointDuration": model.onePointDuration, "sleepLine": model.sleepLine]
+                }
+                output += decoder.accurateSleep(rows: rows)
             }
             if manager?.peripheralModel?.sleepType == 0,
                let rows = VPDataBaseOperation.veepooSDKGetSleepData(withDate: day, andTableID: address) as? [[String: Any]] {
@@ -279,7 +311,8 @@ final class VeepooCapabilityProbe: ObservableObject {
     func readHistoryDiagnostic() { historyStatus = "El SDK no está enlazado." }
     func inspectSDKDatabase() { historyStatus = "El SDK no está enlazado." }
     func extractHeartRatePreview() { historyStatus = "El SDK no está enlazado." }
-    func connect(index: Int) { status = "El SDK no está disponible en esta compilación." }
+    func supports(_ category: String) -> Bool { false }
+    func connect(index: Int, password: String = "0000") { status = "El SDK no está disponible en esta compilación." }
     func scan() {
         status = "No disponible: el framework VeepooBleSDK no está enlazado al target."
     }

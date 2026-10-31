@@ -79,6 +79,7 @@ struct SummaryTile: View {
 }
 
 struct DeviceView: View {
+    @State private var password = "0000"
     @EnvironmentObject var veepoo: VeepooCapabilityProbe
     @EnvironmentObject var measurements: MeasurementStore
     @EnvironmentObject var bluetooth: BluetoothScanner
@@ -88,9 +89,10 @@ struct DeviceView: View {
                 Section {
                     Label(veepoo.ready ? "Reloj preparado" : "Conecta tu reloj", systemImage: "applewatch.radiowaves.left.and.right").font(.title3.bold())
                     Text(veepoo.status).foregroundStyle(.secondary)
+                    SecureField("Contraseña del reloj (4 cifras)", text: $password).keyboardType(.numberPad)
                     Button("Buscar reloj con Veepoo", systemImage: "antenna.radiowaves.left.and.right") { bluetooth.disconnect(); veepoo.scan() }
                     ForEach(Array(veepoo.discovered.enumerated()), id: \.offset) { index, label in
-                        Button(label) { veepoo.connect(index: index) }
+                        Button(label) { veepoo.connect(index: index, password: password) }
                     }
                     Button("Desconectar", role: .destructive) { veepoo.disconnect() }
                 } header: { Text("Conexión oficial SDK") } footer: { Text("Libera la conexión de G Band antes de buscar. El SDK verifica la contraseña del reloj antes de permitir la lectura.") }

@@ -61,4 +61,23 @@ final class BridgeCoreTests: XCTestCase {
         XCTAssertEqual(r[0].value + r[1].value, 168)
     }
 
+    func testCompositionDoesNotTurnProfileWeightIntoMeasurement() {
+        let d = VendorHistoryDecoder(device: "fixture", timeZone: TimeZone(secondsFromGMT: 0)!, now: now)
+        let rows: [[String: Any]] = [["date": "2026-10-30", "testTime": "12:00:00", "bodyFatPercentage": "23.5", "leanBodyMass": "65", "weight": 85]]
+        let r = d.bodyComposition(rows: rows)
+        XCTAssertEqual(r.count, 2)
+        XCTAssertFalse(r.contains { $0.kind == .weightKg })
+        XCTAssertEqual(r.first { $0.kind == .bodyFatFraction }!.value, 0.235, accuracy: 0.00001)
+    }
+
+    func testAccurateSleepSkipsInsomniaAndAwake() {
+        let d = VendorHistoryDecoder(device: "fixture", timeZone: TimeZone(secondsFromGMT: 0)!, now: now)
+        let row: [String: Any] = ["sleepTime": "2026/10/30 01:00", "wakeTime": "2026/10/30 01:05", "onePointDuration": "60", "sleepLine": "00002000400060008000"]
+        let result = d.accurateSleep(rows: [row])
+        XCTAssertEqual(result.count, 3)
+        XCTAssertEqual(result.last!.end.timeIntervalSince(result.first!.start), 180)
+        var invalid = row; invalid["sleepLine"] = "0000ZZZZ"
+        XCTAssertTrue(d.accurateSleep(rows: [invalid]).isEmpty)
+    }
+
 }

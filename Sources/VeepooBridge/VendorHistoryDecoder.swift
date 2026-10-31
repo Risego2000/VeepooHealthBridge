@@ -68,6 +68,46 @@ struct VendorHistoryDecoder {
         }
     }
 
+    func bodyComposition(rows: [[String: Any]]) -> [Measurement] {
+        rows.flatMap { row -> [Measurement] in
+            guard let day = row["date"] as? String, let time = row["testTime"] as? String,
+                  let instant = date(day + " " + time, format: "yyyy-MM-dd HH:mm:ss") else { return [] }
+            var result: [Measurement] = []
+            if let percent = number(row["bodyFatPercentage"]), percent > 0,
+               let m = sample(.bodyFatFraction, percent / 100, instant, instant, "SDK estimated body composition percent") { result.append(m) }
+            if let kg = number(row["leanBodyMass"]),
+               let m = sample(.leanMassKg, kg, instant, instant, "SDK estimated lean mass kg") { result.append(m) }
+            // weight/stature/gender are profile inputs, not measurements provided by the SDK.
+            return result
+        }
+    }
+
+    func accurateSleep(rows: [[String: Any]]) -> [Measurement] {
+        rows.flatMap { row -> [Measurement] in
+            guard let beginText = row["sleepTime"] as? String, let endText = row["wakeTime"] as? String,
+                  let begin = date(beginText, format: "yyyy/MM/dd HH:mm") ?? date(beginText),
+                  let end = date(endText, format: "yyyy/MM/dd HH:mm") ?? date(endText),
+                  let duration = number(row["onePointDuration"]), duration > 0, duration <= 300,
+                  let hex = row["sleepLine"] as? String, !hex.isEmpty, hex.count <= 23040,
+                  hex.count % 4 == 0, hex.allSatisfy({ $0.isHexDigit }),
+                  abs(end.timeIntervalSince(begin) - Double(hex.count / 4) * duration) < 1 else { return [] }
+            let chars = Array(hex)
+            var output: [Measurement] = []
+            for offset in stride(from: 0, to: chars.count, by: 4) {
+                guard let word = UInt16(String(chars[offset..<offset+4]), radix: 16) else { return [] }
+                let state = word >> 13
+                guard state <= 4 else { return [] }
+                // Vendor: deep 0, light 1, REM 2, insomnia 3, awake 4.
+                // Keep only unspecified sleep; no equivalence to Apple's sleep-stage algorithms.
+                if state <= 2 {
+                    let start = begin.addingTimeInterval(Double(offset / 4) * duration)
+                    if let m = sample(.sleepAsleep, 1, start, start.addingTimeInterval(duration), "SDK accurate sleep; stages not equated to Apple") { output.append(m) }
+                }
+            }
+            return output
+        }
+    }
+
     func ordinarySleep(rows: [[String: Any]]) -> [Measurement] {
         rows.flatMap { row -> [Measurement] in
             guard let text = row["SLEEP_TIME"] as? String, let start = date(text, format: "yyyy/MM/dd HH:mm"),
