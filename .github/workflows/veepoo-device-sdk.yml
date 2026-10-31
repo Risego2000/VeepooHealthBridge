@@ -36,11 +36,22 @@ jobs:
           p.write_text(s)
           PY
           xcodegen generate
+      - name: Install vendor dependency pods
+        shell: bash
+        run: |
+          cat > Podfile <<'PODS'
+          platform :ios, '17.0'
+          target 'VeepooHealthBridge' do
+            pod 'AFNetworking', '~> 4.0'
+            pod 'FMDB', '~> 2.7'
+          end
+          PODS
+          pod install
       - name: Compile actual SDK import for iOS device
         shell: bash
         run: |
           set -o pipefail
-          xcodebuild -project VeepooHealthBridge.xcodeproj -scheme VeepooHealthBridge -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build 2>&1 | tee vendor-device-build.log
+          xcodebuild -workspace VeepooHealthBridge.xcworkspace -scheme VeepooHealthBridge -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build 2>&1 | tee vendor-device-build.log
       - name: Upload diagnostic log
         if: always()
         uses: actions/upload-artifact@v4
