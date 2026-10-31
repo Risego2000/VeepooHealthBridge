@@ -86,7 +86,20 @@ workflows:
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$CM_BUILD_DIR/derived-vendor" \
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$CM_BUILD_DIR/vendor-build.log"
+      - name: Package unsigned IPA for external personal signing
+        script: |
+          set -euo pipefail
+          APP="$CM_BUILD_DIR/derived-vendor/Build/Products/Debug-iphoneos/VeepooHealthBridge.app"
+          test -d "$APP"
+          test -f "$APP/Info.plist"
+          test -f "$APP/VeepooHealthBridge"
+          mkdir -p "$CM_BUILD_DIR/ipa-staging/Payload"
+          ditto "$APP" "$CM_BUILD_DIR/ipa-staging/Payload/VeepooHealthBridge.app"
+          cd "$CM_BUILD_DIR/ipa-staging"
+          /usr/bin/zip -qry "$CM_BUILD_DIR/VeepooHealthBridge-UNSIGNED.ipa" Payload
+          /usr/bin/unzip -tq "$CM_BUILD_DIR/VeepooHealthBridge-UNSIGNED.ipa"
+          echo "Created unsigned IPA. This archive MUST be signed/provisioned before installation."
     artifacts:
       - vendor-build.log
+      - VeepooHealthBridge-UNSIGNED.ipa
       - derived-vendor/Build/Products/Debug-iphoneos/VeepooHealthBridge.app/**
-      - derived-vendor/Build/Products/Debug-iphoneos/VeepooHealthBridge.app
