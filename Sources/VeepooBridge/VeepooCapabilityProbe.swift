@@ -101,7 +101,8 @@ final class VeepooCapabilityProbe: ObservableObject {
                     "Composición corporal: \(model.bodyCompositionType)",
                     "Glucosa estimada: \(model.bloodGlucoseType)",
                     "Días retenidos: \(model.saveDays)",
-                    "Firmware: " + (model.deviceVersion ?? "no disponible")
+                    "Firmware: " + (model.deviceVersion ?? "no disponible"),
+                    "Firmware interno: " + (model.deviceTestVersion ?? "no disponible")
                 ]
             }
         }

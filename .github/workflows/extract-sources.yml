@@ -1,34 +1,12 @@
-name: Extract and publish Swift sources
+name: Inspect archived v0.2 source (read-only)
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/extract-sources.yml'
 permissions:
-  contents: write
+  contents: read
 jobs:
-  publish:
+  inspect:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-      - name: Extract and validate
-        shell: bash
-        run: |
-          set -euo pipefail
-          unzip -oq VeepooHealthBridge_v0_2_source.zip -d .extract-tmp
-          test -f .extract-tmp/VeepooHealthBridge_v0_2/project.yml
-          cp -R .extract-tmp/VeepooHealthBridge_v0_2/Sources ./
-          cp .extract-tmp/VeepooHealthBridge_v0_2/project.yml ./
-          cp .extract-tmp/VeepooHealthBridge_v0_2/Info.plist ./
-          cp .extract-tmp/VeepooHealthBridge_v0_2/VeepooHealthBridge.entitlements ./
-          rm -rf .extract-tmp
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Sources project.yml Info.plist VeepooHealthBridge.entitlements
-          if ! git diff --cached --quiet; then
-            git commit -m 'build: publish Swift sources for iOS CI'
-            git push
-          fi
+      - name: List historical archive without overwriting current source
+        run: unzip -l VeepooHealthBridge_v0_2_source.zip

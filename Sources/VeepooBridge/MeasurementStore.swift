@@ -11,7 +11,16 @@ import Foundation
         fileURL = directory.appendingPathComponent("measurements.json")
         if let bytes = try? Data(contentsOf: fileURL),
            let decoded = try? JSONDecoder.iso8601.decode([Measurement].self, from: bytes) {
-            records = decoded
+            records = decoded.filter { MeasurementValidation.accepts($0) }
+            if UserDefaults.standard.integer(forKey: "validationPolicyVersion") < 3 {
+                let reset = records.map { sample -> Measurement in
+                    var sample = sample; sample.validated = false; return sample
+                }
+                do {
+                    try commit(reset)
+                    UserDefaults.standard.set(3, forKey: "validationPolicyVersion")
+                } catch { records = reset; message = "Revisa las muestras antiguas; no se pudo guardar la migración" }
+            }
         }
     }
 
@@ -51,7 +60,14 @@ import Foundation
     }
 
     func deleteAll() {
-        do { try commit([]); message = "Historial local vaciado" }
+        do {
+            try commit([])
+            for name in ["VeepooBridge-export.json", "Veepoo-SDK-private-archive.json"] {
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+            }
+            message = "Historial de Bridge y exportaciones temporales eliminados"
+        }
         catch { message = "No se pudo borrar el historial" }
     }
 

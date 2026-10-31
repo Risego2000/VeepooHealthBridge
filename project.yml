@@ -16,6 +16,8 @@ targets:
     info:
       path: Info.plist
       properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDisplayName: Veepoo Bridge
         NSBluetoothAlwaysUsageDescription: Buscar y conectar el reloj A2 de forma local.
         NSHealthUpdateUsageDescription: Escribir en Salud de Apple las mediciones verificadas y autorizadas por ti.
