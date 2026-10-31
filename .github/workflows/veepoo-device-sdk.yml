@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/veepoo-device-sdk.yml'
       - 'Sources/**'
+      - 'codemagic.yaml'
 permissions:
   contents: read
 jobs:
@@ -55,6 +56,24 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -workspace VeepooHealthBridge.xcworkspace -scheme VeepooHealthBridge -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build 2>&1 | tee vendor-device-build.log
+      - name: Create unsigned IPA artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/Build/Products/Debug-iphoneos/VeepooHealthBridge.app' -type d -print -quit)
+          test -n "$APP"
+          test -f "$APP/Info.plist"
+          mkdir -p ipa-staging/Payload
+          ditto "$APP" ipa-staging/Payload/VeepooHealthBridge.app
+          cd ipa-staging
+          zip -qry ../VeepooHealthBridge-UNSIGNED.ipa Payload
+          unzip -tq ../VeepooHealthBridge-UNSIGNED.ipa
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: VeepooHealthBridge-UNSIGNED-IPA
+          path: VeepooHealthBridge-UNSIGNED.ipa
+          if-no-files-found: error
       - name: Upload diagnostic log
         if: always()
         uses: actions/upload-artifact@v4
