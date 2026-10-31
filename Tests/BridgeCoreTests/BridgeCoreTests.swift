@@ -110,4 +110,29 @@ final class BridgeCoreTests: XCTestCase {
         XCTAssertFalse(r[0].validated)
     }
 
+    func testNNMetricsRemainDistinct() {
+        let values = (0..<80).map { $0 % 2 == 0 ? 800.0 : 1000.0 }
+        let r = NNIntervalAnalysis.calculate(milliseconds: values, normalBeatsConfirmed: true, continuous: true)!
+        XCTAssertEqual(r.sdnnMilliseconds, sqrt(800000.0 / 79), accuracy: 0.000001)
+        XCTAssertEqual(r.rmssdMilliseconds, 200, accuracy: 0.000001)
+        XCTAssertEqual(r.durationSeconds, 72)
+        XCTAssertNotEqual(r.sdnnMilliseconds, r.rmssdMilliseconds)
+    }
+    func testNNRejectsUnconfirmedNormalBeatsAndGaps() {
+        let values = Array(repeating: 1000.0, count: 60)
+        XCTAssertNil(NNIntervalAnalysis.calculate(milliseconds: values, normalBeatsConfirmed: false, continuous: true))
+        XCTAssertNil(NNIntervalAnalysis.calculate(milliseconds: values, normalBeatsConfirmed: true, continuous: false))
+    }
+    func testNNRejectsShortOrInvalidSeries() {
+        XCTAssertNil(NNIntervalAnalysis.calculate(milliseconds: [800, 900], normalBeatsConfirmed: true, continuous: true))
+        var values = Array(repeating: 1000.0, count: 60); values[0] = .nan
+        XCTAssertNil(NNIntervalAnalysis.calculate(milliseconds: values, normalBeatsConfirmed: true, continuous: true))
+        values[0] = 0
+        XCTAssertNil(NNIntervalAnalysis.calculate(milliseconds: values, normalBeatsConfirmed: true, continuous: true))
+    }
+    func testNNConstantSeriesDoesNotInventVariability() {
+        let r = NNIntervalAnalysis.calculate(milliseconds: Array(repeating: 1000, count: 60), normalBeatsConfirmed: true, continuous: true)!
+        XCTAssertEqual(r.sdnnMilliseconds, 0); XCTAssertEqual(r.rmssdMilliseconds, 0)
+    }
+
 }

@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
     var body: some Scene {
         WindowGroup {
             ContentView().environmentObject(bluetooth).environmentObject(veepoo)
-                .environmentObject(health).environmentObject(measurements).tint(.teal)
+                .environmentObject(health).environmentObject(measurements).tint(.orange).preferredColorScheme(.light)
         }
     }
 }
@@ -24,11 +24,9 @@ struct ContentView: View {
     @State private var tab = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--screen=") })?.replacingOccurrences(of: "--screen=", with: "") ?? "home"
     var body: some View {
         TabView(selection: $tab) {
-            DashboardView().tabItem { Label("Resumen", systemImage: "square.grid.2x2.fill") }.tag("home")
-            DeviceView().tabItem { Label("Reloj", systemImage: "applewatch") }.tag("device")
-            HistoryView().tabItem { Label("Historial", systemImage: "chart.xyaxis.line") }.tag("history")
-            HealthView().tabItem { Label("Salud", systemImage: "heart.fill") }.tag("health")
-            SettingsView().tabItem { Label("Ajustes", systemImage: "gearshape.fill") }.tag("settings")
+            DashboardView().tabItem { Label("Salud", systemImage: "heart.text.square.fill") }.tag("home")
+            DeviceView().tabItem { Label("Dispositivo", systemImage: "applewatch") }.tag("device")
+            ProfileView().tabItem { Label("Perfil", systemImage: "person.crop.circle") }.tag("settings")
         }
         .onChange(of: veepoo.historyRevision) { _, _ in
             veepoo.extractHeartRatePreview()
@@ -43,53 +41,218 @@ struct ContentView: View {
     }
 }
 
+enum BandTheme {
+    static let background = Color(red: 0.96, green: 0.97, blue: 0.98)
+    static let accent = Color(red: 1, green: 0.49, blue: 0.12)
+}
+
 struct DashboardView: View {
-    @EnvironmentObject var veepoo: VeepooCapabilityProbe
     @EnvironmentObject var measurements: MeasurementStore
+    @EnvironmentObject var veepoo: VeepooCapabilityProbe
+    @State private var selectedDay = Date()
+    @AppStorage("dailyStepGoal") private var goal = 8000
+    private var today: [Measurement] { measurements.records.filter { Calendar.current.isDate($0.start, inSameDayAs: selectedDay) } }
+    private var steps: Double { today.filter { $0.kind == .steps }.reduce(0) { $0 + $1.value } }
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("VEEPOO · HEALTH BRIDGE", systemImage: "waveform.path.ecg").font(.caption.weight(.bold))
-                        Text("Tu salud,\nen un mismo lugar.").font(.largeTitle.bold())
-                        Text("Del reloj a Salud de Apple. Tú decides qué datos compartir.").font(.subheadline)
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
-                        .foregroundStyle(.white).background(LinearGradient(colors: [.teal, Color(red: 0.05, green: 0.28, blue: 0.35)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 28))
-                    HStack(spacing: 12) {
-                        SummaryTile(title: "En tu iPhone", value: "\(measurements.records.count)", symbol: "tray.full.fill")
-                        SummaryTile(title: "Verificados", value: "\(measurements.records.filter(\.validated).count)", symbol: "checkmark.shield.fill")
+                VStack(spacing: 14) {
+                    HStack {
+                        Text("Veepoo Bridge").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        DatePicker("Día", selection: $selectedDay, in: ...Date(), displayedComponents: .date).labelsHidden()
                     }
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("Tu reloj A2", systemImage: "applewatch").font(.headline)
-                        Text(veepoo.ready ? "Conectado y autenticado" : "Sin conexión verificada").foregroundStyle(.secondary)
-                        Text("Firmware de referencia: 02.52.01.00-5982").font(.caption).foregroundStyle(.secondary)
-                        NavigationLink("Configurar conexión") { DeviceView() }.buttonStyle(.borderedProminent)
-                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(.background, in: RoundedRectangle(cornerRadius: 22))
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Primera sincronización").font(.headline)
-                        Label("Conecta y autentica el reloj", systemImage: "1.circle")
-                        Label("Descarga y revisa las muestras", systemImage: "2.circle")
-                        Label("Autoriza el envío a Salud", systemImage: "3.circle")
-                    }.font(.subheadline).padding(20)
-                    Label("Datos locales · Sin cuenta de usuario · Sin datos de demostración", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
-                    Text("Versión de pruebas. La compatibilidad del A2 requiere validación física.").font(.caption).foregroundStyle(.secondary)
-                }.padding(20)
-            }.background(Color(.systemGroupedBackground)).navigationTitle("Resumen")
+                    activitySummary
+                    NavigationLink { HistoryView() } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "figure.walk.circle.fill").font(.title).foregroundStyle(.blue)
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack { Text("Actividad diaria").font(.headline); Spacer(); Image(systemName: "chevron.right").font(.caption) }
+                                ProgressView(value: min(steps / Double(max(goal, 1)), 1)).tint(.blue)
+                                Text(today.contains(where: { $0.kind == .steps }) ? "Objetivo: \(goal) pasos" : "Sin actividad descargada del reloj").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }.padding(16).background(.white, in: RoundedRectangle(cornerRadius: 18))
+                    }.buttonStyle(.plain)
+                    HStack {
+                        Label("Datos de salud", systemImage: "heart.text.square.fill").font(.headline)
+                        Spacer()
+                        Text(veepoo.ready ? "Conectado" : "Sin conectar").font(.caption).foregroundStyle(.secondary)
+                    }.padding(.top, 6)
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach([Measurement.Kind.sleepAsleep, .heartRate, .hrvSDNN, .oxygenFraction, .bodyTemperatureC, .systolic, .bodyFatFraction, .leanMassKg, .bodyMassIndex, .respiratoryRate], id: \.self) { kind in
+                            NavigationLink { BandMetricDetail(kind: kind) } label: { BandMetricCard(kind: kind, records: today) }.buttonStyle(.plain)
+                        }
+                    }
+                    NavigationLink { CardiacDataView() } label: {
+                        HStack {
+                            Image(systemName: "waveform.path.ecg").font(.title2).foregroundStyle(BandTheme.accent)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("ECG y VFC originales").font(.headline)
+                                Text("Trazados, intervalos y datos del fabricante").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                        }.padding(18).background(.white, in: RoundedRectangle(cornerRadius: 18))
+                    }.buttonStyle(.plain)
+                    Text("Sin datos inventados. Cada tarjeta muestra únicamente registros locales de la fecha elegida.").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                }.padding(16)
+            }.background(BandTheme.background)
+                .navigationTitle("Salud").navigationBarTitleDisplayMode(.inline)
+                .toolbar { NavigationLink { HistoryView() } label: { Image(systemName: "clock.arrow.circlepath") } }
+        }
+    }
+    private var activitySummary: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle().stroke(BandTheme.accent.opacity(0.12), lineWidth: 12)
+                Circle().trim(from: 0, to: min(steps / Double(max(goal, 1)), 1)).stroke(BandTheme.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round)).rotationEffect(.degrees(-90))
+                VStack(spacing: 3) {
+                    Text(today.contains(where: { $0.kind == .steps }) ? steps.formatted(.number.precision(.fractionLength(0))) : "—").font(.system(size: 30, weight: .semibold, design: .rounded))
+                    Text("/ \(goal) pasos").font(.caption).foregroundStyle(.secondary)
+                    Image(systemName: "shoeprints.fill").foregroundStyle(BandTheme.accent)
+                }
+            }.frame(width: 140, height: 140).padding(.top, 12)
+            HStack {
+                activityValue("Calorías", kind: .activeEnergyKcal, unit: "kcal")
+                Divider().frame(height: 35)
+                VStack(spacing: 5) { Text("Pasos").font(.caption).foregroundStyle(.secondary); Text(steps > 0 ? steps.formatted(.number.precision(.fractionLength(0))) : "—").font(.headline) }.frame(maxWidth: .infinity)
+                Divider().frame(height: 35)
+                activityValue("Distancia", kind: .walkingRunningMeters, unit: "km")
+            }
+        }.padding(20).frame(maxWidth: .infinity).background(.white, in: RoundedRectangle(cornerRadius: 20))
+    }
+    private func activityValue(_ title: String, kind: Measurement.Kind, unit: String) -> some View {
+        let rows = today.filter { $0.kind == kind }
+        let value = rows.reduce(0) { $0 + $1.value } / (kind == .walkingRunningMeters ? 1000 : 1)
+        return VStack(spacing: 5) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(rows.isEmpty ? "—" : value.formatted(.number.precision(.fractionLength(1))) + " " + unit).font(.headline)
+        }.frame(maxWidth: .infinity)
+    }
+}
+
+struct BandMetricCard: View {
+    let kind: Measurement.Kind
+    let records: [Measurement]
+    private var rows: [Measurement] { records.filter { $0.kind == kind }.sorted { $0.start > $1.start } }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: symbol).foregroundStyle(color)
+                Text(kind == .hrvSDNN ? "VFC · SDNN" : kind.title).font(.subheadline.weight(.medium)).lineLimit(2)
+                Spacer(minLength: 0)
+            }
+            if let m = rows.first {
+                Text(display(m)).font(.title2.bold()).foregroundStyle(.primary).minimumScaleFactor(0.7).lineLimit(1)
+                Text(m.start.formatted(date: .omitted, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("Sin datos").font(.title3.weight(.semibold)).foregroundStyle(.secondary)
+                Text("Pendiente de lectura").font(.caption).foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+        }.padding(16).frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading).background(.white, in: RoundedRectangle(cornerRadius: 18))
+    }
+    private var symbol: String {
+        switch kind {
+        case .sleepAsleep: return "bed.double.fill"
+        case .oxygenFraction, .respiratoryRate: return "lungs.fill"
+        case .bodyTemperatureC: return "thermometer.medium"
+        case .hrvSDNN: return "waveform.path"
+        case .heartRate, .systolic, .diastolic: return "heart.fill"
+        default: return "figure.stand"
+        }
+    }
+    private var color: Color {
+        switch kind {
+        case .sleepAsleep: return .purple
+        case .oxygenFraction, .respiratoryRate: return .cyan
+        case .bodyTemperatureC: return .orange
+        case .heartRate, .hrvSDNN, .systolic, .diastolic: return .pink
+        default: return .blue
+        }
+    }
+    private func display(_ m: Measurement) -> String {
+        switch kind {
+        case .sleepAsleep:
+            let minutes = rows.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) } / 60
+            return "\(Int(minutes) / 60) h \(Int(minutes) % 60) min"
+        case .heartRate: return m.value.formatted() + " lpm"
+        case .hrvSDNN: return m.value.formatted() + " ms"
+        case .oxygenFraction, .bodyFatFraction: return (m.value * 100).formatted(.number.precision(.fractionLength(1))) + " %"
+        case .bodyTemperatureC: return m.value.formatted() + " °C"
+        case .systolic, .diastolic: return m.value.formatted() + " mmHg"
+        case .leanMassKg: return m.value.formatted() + " kg"
+        case .respiratoryRate: return m.value.formatted() + " /min"
+        default: return m.value.formatted()
         }
     }
 }
 
-struct SummaryTile: View {
-    let title: String
-    let value: String
-    let symbol: String
+struct BandMetricDetail: View {
+    let kind: Measurement.Kind
+    @EnvironmentObject var measurements: MeasurementStore
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(.teal)
-            Text(value).font(.title.bold())
-            Text(title).font(.caption).foregroundStyle(.secondary)
-        }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(.background, in: RoundedRectangle(cornerRadius: 22))
+        List {
+            Section { MeasurementChart(records: measurements.records, kind: kind) }
+            Section("Registros originales") {
+                ForEach(measurements.records.filter { $0.kind == kind }.prefix(200)) { m in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("\(m.value.formatted()) · \(m.start.formatted())")
+                        Text(m.method).font(.caption).foregroundStyle(.secondary)
+                        Text(m.validated ? "Verificado por ti" : "Pendiente de verificación").font(.caption)
+                    }
+                }
+            }
+        }.navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct ProfileView: View {
+    @AppStorage("dailyStepGoal") private var goal = 8000
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 16) {
+                        Image(systemName: "person.crop.circle.fill").font(.system(size: 48)).foregroundStyle(BandTheme.accent)
+                        VStack(alignment: .leading) { Text("Veepoo Bridge").font(.headline); Text("Tus datos, en tu iPhone").font(.subheadline).foregroundStyle(.secondary) }
+                    }.padding(.vertical, 8)
+                }
+                Section("Mi salud") {
+                    NavigationLink("Historial y archivos") { HistoryView() }
+                    NavigationLink("Salud de Apple") { HealthView() }
+                    NavigationLink("ECG y VFC originales") { CardiacDataView() }
+                }
+                Section("Objetivo de actividad") {
+                    Stepper("\(goal) pasos al día", value: $goal, in: 1000...50000, step: 500)
+                    Text("Es un objetivo configurable, no una medición del reloj.").font(.caption)
+                }
+                Section { NavigationLink("Configuración y diagnóstico") { SettingsView() } }
+            }.navigationTitle("Perfil").navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+struct CardiacDataView: View {
+    @EnvironmentObject var veepoo: VeepooCapabilityProbe
+    @State private var archive = false
+    var body: some View {
+        List {
+            Section("ECG · registro original") {
+                Label("El trazado se conserva en Bridge", systemImage: "waveform.path.ecg").foregroundStyle(BandTheme.accent)
+                Text("Salud no permite crear una muestra ECG de terceros. Puedes examinar y compartir el archivo original del SDK.").font(.footnote)
+                Button("Preparar datos cardíacos del SDK") { veepoo.exportSDKArchive() }.disabled(!veepoo.ready || veepoo.reading)
+                if let url = veepoo.archiveURL {
+                    Button("Examinar trazados e intervalos originales") { archive = true }
+                    ShareLink("Compartir archivo original", item: url)
+                }
+            }
+            Section("VFC · método de cálculo") {
+                Text("SDNN se envía como SDNN. El valor HRV genérico del fabricante no se renombra ni se convierte a SDNN.")
+                Text("El SDK dispone de campos SDNN y RMSSD en su informe ECG. Su disponibilidad en el A2 y las condiciones de acceso del fabricante necesitan comprobación.").font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("Estado de lectura") { Text(veepoo.historyStatus).font(.caption) }
+        }.navigationTitle("ECG y VFC").navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $archive) { if let url = veepoo.archiveURL { RawArchiveView(url: url) } }
     }
 }
 
@@ -289,7 +452,7 @@ struct SettingsView: View {
                     Button("Desconectar diagnóstico") { bluetooth.disconnect() }
                 }
                 Section("Acerca de") {
-                    LabeledContent("Versión candidata", value: "0.4")
+                    LabeledContent("Versión candidata", value: "0.5")
                     Text("A2 · firmware objetivo 02.52.01.00-5982")
                     Text("Sin validación física. Las capacidades mostradas proceden del reloj cuando se conecta, no de una lista de funciones supuestas.").font(.caption)
                 }
@@ -303,6 +466,10 @@ struct SettingsView: View {
 struct MeasurementChart: View {
     let records: [Measurement]
     @State private var kind = Measurement.Kind.heartRate
+    init(records: [Measurement], kind: Measurement.Kind = .heartRate) {
+        self.records = records
+        _kind = State(initialValue: kind)
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("Métrica", selection: $kind) {

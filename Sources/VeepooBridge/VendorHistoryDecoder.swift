@@ -127,3 +127,26 @@ struct VendorHistoryDecoder {
     }
 }
 import CoreFoundation
+
+/// Offline numerical analysis only. Never assumes raw RR are normal-to-normal intervals.
+/// The caller must establish units, normal-beat classification and continuity first.
+struct NNIntervalAnalysis {
+    let sdnnMilliseconds: Double
+    let rmssdMilliseconds: Double
+    let durationSeconds: Double
+    let count: Int
+
+    static func calculate(milliseconds: [Double], normalBeatsConfirmed: Bool, continuous: Bool) -> NNIntervalAnalysis? {
+        guard normalBeatsConfirmed, continuous, milliseconds.count >= 30,
+              milliseconds.count <= 100_000,
+              milliseconds.allSatisfy({ $0.isFinite && (250...2500).contains($0) }) else { return nil }
+        let total = milliseconds.reduce(0, +)
+        guard total >= 60_000, total <= 86_400_000 else { return nil }
+        let mean = total / Double(milliseconds.count)
+        let variance = milliseconds.reduce(0) { $0 + pow($1 - mean, 2) } / Double(milliseconds.count - 1)
+        let squaredDifferences = zip(milliseconds.dropFirst(), milliseconds).reduce(0) { $0 + pow($1.0 - $1.1, 2) }
+        return NNIntervalAnalysis(sdnnMilliseconds: sqrt(variance),
+            rmssdMilliseconds: sqrt(squaredDifferences / Double(milliseconds.count - 1)),
+            durationSeconds: total / 1000, count: milliseconds.count)
+    }
+}

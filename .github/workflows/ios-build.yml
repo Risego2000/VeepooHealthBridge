@@ -49,7 +49,7 @@ jobs:
           xcrun simctl status_bar "$DEVICE_ID" override --time '9:41' --batteryState charged --batteryLevel 100
           xcrun simctl install "$DEVICE_ID" derived/Build/Products/Release-iphonesimulator/VeepooHealthBridge.app
           mkdir -p interface-captures
-          for screen in home device history health settings; do
+          for screen in home device settings; do
             xcrun simctl launch --terminate-running-process "$DEVICE_ID" org.veepoobridge.ios "--screen=$screen" -AppleLanguages '(es)' -AppleLocale es_ES
             sleep 3
             xcrun simctl io "$DEVICE_ID" screenshot "interface-captures/$screen.png"
