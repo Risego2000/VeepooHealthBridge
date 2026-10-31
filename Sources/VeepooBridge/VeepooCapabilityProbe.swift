@@ -13,6 +13,7 @@ final class VeepooCapabilityProbe: ObservableObject {
     @Published private(set) var capabilities: [String] = []
     @Published private(set) var discovered: [String] = []
     @Published private(set) var historyStatus = "Sin lectura iniciada"
+    @Published private(set) var databaseSummary: [String] = []
 
     #if canImport(VeepooBleSDK)
     private let manager = VPBleCentralManage.sharedBleManager()
@@ -77,9 +78,27 @@ final class VeepooCapabilityProbe: ObservableObject {
             }
         }
     }
+    func inspectSDKDatabase() {
+        guard let address = manager?.peripheralModel?.deviceAddress, !address.isEmpty else {
+            historyStatus = "No se conoce la dirección del reloj conectado."
+            return
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        databaseSummary = (0..<min(7, Int(manager?.peripheralModel?.saveDays ?? 0) + 1)).map { dayOffset in
+            let day = formatter.string(from: Calendar.current.date(byAdding: .day, value: -dayOffset, to: Date()) ?? Date())
+            let raw = VPDataBaseOperation.veepooSDKGetOriginalData(withDate: day, andTableID: address)
+            let sleep = VPDataBaseOperation.veepooSDKGetSleepData(withDate: day, andTableID: address)
+            let oxygen = VPDataBaseOperation.veepooSDKGetDeviceOxygenData(withDate: day, andTableID: address)
+            let hrv = VPDataBaseOperation.veepooSDKGetDeviceHrvData(withDate: day, andTableID: address)
+            return "\(day): intervalos \(raw?.count ?? 0), sueño \(sleep?.count ?? 0), oxígeno \(oxygen?.count ?? 0), HRV \(hrv?.count ?? 0)"
+        }
+        historyStatus = "Diagnóstico local disponible. Ninguna medición se ha enviado a HealthKit."
+    }
     #else
     init() {}
     func readHistoryDiagnostic() { historyStatus = "El SDK no está enlazado." }
+    func inspectSDKDatabase() { historyStatus = "El SDK no está enlazado." }
     func connect(index: Int) { status = "El SDK no está disponible en esta compilación." }
     func scan() {
         status = "No disponible: el framework VeepooBleSDK no está enlazado al target."
