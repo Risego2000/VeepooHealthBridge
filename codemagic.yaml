@@ -43,7 +43,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
-      xcode: latest
+      xcode: 16.4
     scripts:
       - name: Install tooling and fetch official Veepoo SDK
         script: |
@@ -81,7 +81,7 @@ workflows:
           set -o pipefail
           xcodebuild -workspace VeepooHealthBridge.xcworkspace \
             -scheme VeepooHealthBridge \
-            -configuration Release \
+            -configuration Debug \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$CM_BUILD_DIR/derived-vendor" \
