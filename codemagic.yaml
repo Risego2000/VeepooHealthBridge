@@ -88,4 +88,5 @@ workflows:
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$CM_BUILD_DIR/vendor-build.log"
     artifacts:
       - vendor-build.log
-      - derived-vendor/Build/Products/Release-iphoneos/*.app
+      - derived-vendor/Build/Products/Debug-iphoneos/VeepooHealthBridge.app/**
+      - derived-vendor/Build/Products/Debug-iphoneos/VeepooHealthBridge.app
