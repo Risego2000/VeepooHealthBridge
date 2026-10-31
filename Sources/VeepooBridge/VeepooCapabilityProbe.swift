@@ -62,6 +62,8 @@ final class VeepooCapabilityProbe: ObservableObject {
 
     init() {
         status = "VeepooBleSDK disponible: inicia búsqueda"
+        if let bytes = try? Data(contentsOf: manualFileURL),
+           let decoded = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] { manualRecords = decoded }
         manager?.isLogEnable = false
         manager?.automaticConnection = automaticReconnect
         manager?.vpBleConnectStateChangeBlock = { [weak self] state in
@@ -133,6 +135,11 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
     }
 
+    private var manualFileURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("manualMeasurements.json")
+    }
+
     func readManualHistory() {
         guard ready, !reading, let peripheral = manager?.peripheralManage,
               let address = manager?.peripheralModel?.deviceAddress,
@@ -148,6 +155,16 @@ final class VeepooCapabilityProbe: ObservableObject {
                 self.reading = false
                 guard let model else { self.historyStatus = "El SDK no devolvió mediciones manuales"; return }
                 self.manualRecords[address] = self.manualJSON(model)
+                do {
+                    let data = try JSONSerialization.data(withJSONObject: self.manualRecords, options: [.sortedKeys])
+                    try FileManager.default.createDirectory(at: self.manualFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try data.write(to: self.manualFileURL, options: [.atomic, .completeFileProtection])
+                    var url = self.manualFileURL
+                    var attributes = URLResourceValues(); attributes.isExcludedFromBackup = true
+                    try url.setResourceValues(attributes)
+                } catch {
+                    self.historyStatus = "Mediciones manuales recibidas, pero no guardadas: \(error.localizedDescription)"; return
+                }
                 self.historyStatus = "Historial manual recibido. Prepara el archivo privado para examinar sus categorías; sin envío automático a Salud de campos sin unidades confirmadas."
             }
         }
