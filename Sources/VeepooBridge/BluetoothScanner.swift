@@ -11,6 +11,9 @@ final class BluetoothScanner: NSObject, ObservableObject, CBCentralManagerDelega
     @Published private(set) var status = "Inicializando"
     @Published private(set) var scanning = false
     @Published private(set) var devices: [NearbyDevice] = []
+    @Published private(set) var connectionStatus = "Sin conectar"
+    @Published private(set) var services: [String] = []
+    private var selectedPeripheral: CBPeripheral?
     private var central: CBCentralManager!
 
     override init() {
@@ -26,6 +29,41 @@ final class BluetoothScanner: NSObject, ObservableObject, CBCentralManagerDelega
         case .unsupported: status = "No compatible"
         default: status = "No disponible"
         }
+    }
+
+    func connect(to id: UUID) {
+        guard central.state == .poweredOn else {
+            connectionStatus = "Bluetooth no disponible"
+            return
+        }
+        guard let device = central.retrievePeripherals(withIdentifiers: [id]).first else {
+            connectionStatus = "Dispositivo no encontrado: vuelve a buscar"
+            return
+        }
+        central.stopScan()
+        scanning = false
+        selectedPeripheral = device
+        device.delegate = self
+        connectionStatus = "Conectando a \(device.name ?? "A2")"
+        central.connect(device, options: nil)
+    }
+
+    func disconnect() {
+        if let selectedPeripheral { central.cancelPeripheralConnection(selectedPeripheral) }
+    }
+
+    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        connectionStatus = "Conectado por BLE — descubriendo servicios"
+        peripheral.discoverServices(nil)
+    }
+
+    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        connectionStatus = "Falló la conexión: \(error?.localizedDescription ?? "sin detalle")"
+    }
+
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        connectionStatus = "Desconectado \(error?.localizedDescription ?? "")"
+        services = []
     }
 
     func toggleScan() {
@@ -44,5 +82,16 @@ final class BluetoothScanner: NSObject, ObservableObject, CBCentralManagerDelega
         let device = NearbyDevice(id: peripheral.identifier, name: name, rssi: RSSI.intValue)
         if let i = devices.firstIndex(where: { $0.id == device.id }) { devices[i] = device }
         else { devices.append(device) }
+    }
+}
+
+extension BluetoothScanner: CBPeripheralDelegate {
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        if let error {
+            connectionStatus = "Error de servicios: \(error.localizedDescription)"
+            return
+        }
+        services = (peripheral.services ?? []).map { $0.uuid.uuidString }
+        connectionStatus = "Conexión BLE establecida · \(services.count) servicios. No se han leído mediciones."
     }
 }
