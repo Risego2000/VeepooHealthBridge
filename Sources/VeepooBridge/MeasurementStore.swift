@@ -39,6 +39,21 @@ import Foundation
         } catch { message = "No se pudo leer JSON: \(error.localizedDescription)" }
     }
 
+    func addSDKPreview(_ samples: [Measurement]) {
+        var byID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { existing, _ in existing })
+        let oldCount = byID.count
+        for sample in samples where sample.value.isFinite && !sample.id.isEmpty {
+            if byID[sample.id] == nil {
+                var unverified = sample
+                unverified.validated = false
+                byID[sample.id] = unverified
+            }
+        }
+        records = Array(byID.values).sorted { $0.start > $1.start }
+        persist()
+        message = "SDK: \(byID.count - oldCount) muestras nuevas guardadas sin validar"
+    }
+
     func deleteAll() { records = []; persist(); message = "Archivo local vaciado" }
 
     func exportJSON() throws -> URL {
