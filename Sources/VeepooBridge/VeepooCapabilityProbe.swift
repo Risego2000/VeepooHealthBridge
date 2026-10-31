@@ -22,6 +22,7 @@ final class VeepooCapabilityProbe: ObservableObject {
 
     func scan() {
         status = "Buscando mediante SDK oficial"
+        guard let manager else { status = "Gestor Veepoo no inicializado"; return }
         manager.veepooSDKStartScanDeviceAndReceiveScanningDevice { [weak self] models in
             Task { @MainActor in
                 // The callback's collection type is defined by VPPublicDefine.
@@ -32,11 +33,12 @@ final class VeepooCapabilityProbe: ObservableObject {
 
     func connect(_ device: VPPeripheralModel) {
         status = "Conectando mediante SDK Veepoo"
+        guard let manager else { status = "Gestor Veepoo no inicializado"; return }
         manager.veepooSDKConnectDevice(device) { [weak self] state in
             Task { @MainActor in
                 guard let self else { return }
                 self.status = "Estado de conexión SDK: \(state)"
-                guard let model = self.manager.peripheralModel else { return }
+                guard let model = self.manager?.peripheralModel else { return }
                 self.capabilities = [
                     "HRV: \(model.hrvType)",
                     "ECG: \(model.ecgType)",
