@@ -1,4 +1,4 @@
-name: iOS build validation
+name: iOS build validation (Veepoo Bridge)
 on:
   workflow_dispatch:
   push:
@@ -18,6 +18,8 @@ jobs:
         run: |
           unzip -q VeepooHealthBridge_v0_2_source.zip -d extracted
           test -f extracted/VeepooHealthBridge_v0_2/project.yml
+      - name: Show Xcode environment
+        run: xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Compile iOS simulator without signing
