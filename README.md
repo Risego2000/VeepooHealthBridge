@@ -1,3 +1,5 @@
+> **Revisión de diseño 0.5:** referencia visual corregida a G Band (tres pestañas y acento naranja). Estudio técnico: [ECG, VFC y Apple Health](docs/ESTUDIO_GBAND_SALUD_0_5.md). 18 pruebas del núcleo y compilación Release con SDK oficial verificadas. Tres capturas reales del simulador revisadas. No se afirma igualdad de capacidades ni compatibilidad A2 a partir del diseño.
+
 > **Revisión vigente 0.4.0:** consulta [AMPLIACION_0_4.md](docs/AMPLIACION_0_4.md). Incluye lectura manual por capacidades anunciadas, visor de datos originales, IMC, sincronización opcional de muestras verificadas, cola de envío y declaración BLE en segundo plano. 14 pruebas del núcleo y compilación Release con SDK oficial verificadas. Sin validación física del A2 ni distribución firmada. El informe 0.3 siguiente conserva la evidencia de la versión anterior.
 
 # Veepoo Health Bridge · candidata 0.3

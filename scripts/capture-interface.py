@@ -19,12 +19,12 @@ def retry(command, attempts=4):
             time.sleep(5)
 
 
-devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j'], timeout=45))
+devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j'], timeout=120))
 device = next(x for group in devices['devices'].values() for x in group if 'iPhone' in x['name'])
 identifier = device['udid']
 print('Capture device:', device['name'], identifier, flush=True)
 if device['state'] != 'Booted':
-    run(['xcrun', 'simctl', 'boot', identifier])
+    run(['xcrun', 'simctl', 'boot', identifier], timeout=120)
 try:
     run(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', identifier], timeout=20)
     run(['xcrun', 'simctl', 'bootstatus', identifier, '-b'], timeout=120)
