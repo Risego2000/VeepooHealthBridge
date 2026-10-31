@@ -21,6 +21,7 @@ jobs:
           git clone --depth=1 https://github.com/HBandSDK/iOS_Ble_SDK.git /tmp/veepoo-vendor
           mkdir -p Vendor
           cp -R /tmp/veepoo-vendor/iOS_sdk_source/Framework/2.0.43.15/VeepooBleSDK.framework Vendor/
+          cp -R /tmp/veepoo-vendor/iOS_sdk_source/Demo/VeepooBleSDKDemo/VeepooBleSDKDemo/GRDFUSDK.framework Vendor/
           file Vendor/VeepooBleSDK.framework/VeepooBleSDK
           lipo -info Vendor/VeepooBleSDK.framework/VeepooBleSDK
       - name: Install XcodeGen
@@ -44,6 +45,7 @@ jobs:
           target 'VeepooHealthBridge' do
             pod 'AFNetworking', '~> 4.0'
             pod 'FMDB', '~> 2.7'
+            pod 'iOSDFULibrary'
           end
           PODS
           pod install
