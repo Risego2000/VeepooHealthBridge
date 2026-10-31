@@ -42,6 +42,7 @@ jobs:
         run: |
           cat > Podfile <<'PODS'
           platform :ios, '17.0'
+          use_frameworks!
           target 'VeepooHealthBridge' do
             pod 'AFNetworking', '~> 4.0'
             pod 'FMDB', '~> 2.7'
