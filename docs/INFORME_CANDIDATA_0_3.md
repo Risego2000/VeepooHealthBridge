@@ -110,11 +110,11 @@ Estas pruebas no ejercitan Bluetooth físico, el código interno del binario Vee
 
 | Evidencia | Revisión | Resultado comprobado |
 |---|---|---|
-| [Pruebas y compilación de fuente](https://github.com/Risego2000/VeepooHealthBridge/actions/runs/41171214979) | `801bd8f421423ad888f340f221bc5bdea4a5c78c` | Paso de 12 tests del núcleo correcto; compilación de simulador y compilación iPhone sin SDK correctas |
+| [Pruebas y compilación de fuente](https://github.com/Risego2000/VeepooHealthBridge/actions/runs/41171214979) | `801bd8f421423ad888f340f221bc5bdea4a5c78c` | Workflow completo correcto: 12 tests del núcleo, compilación de simulador, compilación iPhone sin SDK y captura de cinco pantallas reales |
 | [Integración oficial de dispositivo](https://github.com/Risego2000/VeepooHealthBridge/actions/runs/41171134561) | `adc1af27f56f801c287dd3c74672702ae15aff69` | Workflow completo correcto: SDK 2.2.110.15, compilación iPhone, comprobación de textos de privacidad y empaquetado IPA |
 | Inspección del artefacto descargado | Binario de la revisión `adc1af27` | ZIP/IPA íntegro; bundle `org.veepoobridge.ios`; versión `0.3.0`, build `3`; iOS mínimo 17.0; sin perfil de aprovisionamiento |
 
-La revisión `801bd8f4` solo modifica el workflow de capturas respecto a `adc1af27`; la fuente de la app y los tests son iguales. La fase de capturas es opcional y tiene su propio resultado: un paso de compilación correcto no se usa para afirmar que el simulador gráfico haya arrancado.
+La revisión `801bd8f4` solo modifica el workflow de capturas respecto a `adc1af27`; la fuente de la app y los tests son iguales. La fase de capturas es opcional y tiene su propio resultado: en esta ejecución terminó correctamente. Se descargaron y revisaron las cinco imágenes de 1206 × 2622 píxeles: Resumen, Reloj, Historial, Salud y Ajustes. No contienen mediciones de demostración. El simulador no carga los frameworks exclusivos de dispositivo y muestra ese estado explícitamente.
 
 **IPA sin firma:** `VeepooHealthBridge-UNSIGNED.ipa`, 2.434.401 bytes.  
 **SHA-256 de la IPA:** `ea3f2f8317a404f5487957410c6869fa1c2289381c616ca4df8e3f58f2bb5e3e`.  
@@ -132,7 +132,7 @@ Los logs registran fallos intermedios y sus correcciones. No se utilizan ejecuci
 | Núcleo probado automáticamente | Resultado específico en las evidencias de CI |
 | Compilación para simulador | Resultado específico en las evidencias de CI; sin SDK de dispositivo |
 | Compilación para iPhone con SDK real | Resultado específico en las evidencias de CI |
-| Interfaz ejecutado en simulador | Solo se acredita con capturas obtenidas del ejecutor; no con un diseño generado |
+| Interfaz ejecutado en simulador | Sí: cinco capturas reales descargadas y revisadas, sin datos simulados |
 | Comunicación física con A2 | No probada |
 | Descarga íntegra del A2 y cotejo con G Band | No probados |
 | Escritura real y repetición en Salud | No probadas |
