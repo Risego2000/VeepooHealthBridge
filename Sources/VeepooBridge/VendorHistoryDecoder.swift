@@ -77,6 +77,8 @@ struct VendorHistoryDecoder {
                let m = sample(.bodyFatFraction, percent / 100, instant, instant, "SDK estimated body composition percent") { result.append(m) }
             if let kg = number(row["leanBodyMass"]),
                let m = sample(.leanMassKg, kg, instant, instant, "SDK estimated lean mass kg") { result.append(m) }
+            if let bmi = number(row["bmi"]),
+               let m = sample(.bodyMassIndex, bmi, instant, instant, "SDK estimated BMI; profile-derived") { result.append(m) }
             // weight/stature/gender are profile inputs, not measurements provided by the SDK.
             return result
         }

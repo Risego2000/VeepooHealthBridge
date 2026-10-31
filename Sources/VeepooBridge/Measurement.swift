@@ -5,10 +5,15 @@ import CryptoKit
 struct Measurement: Codable, Identifiable, Hashable {
     enum Kind: String, Codable, CaseIterable {
         case heartRate, hrvSDNN, steps, weightKg, bodyFatFraction, leanMassKg
+        case bodyMassIndex, respiratoryRate, walkingRunningMeters, activeEnergyKcal
         case oxygenFraction, bodyTemperatureC, systolic, diastolic, sleepAsleep
         case ecgWaveform, qtMilliseconds, uricAcidEstimate, lipidEstimate, glucoseEstimate
         var title: String {
             switch self {
+            case .bodyMassIndex: return "Índice de masa corporal"
+            case .respiratoryRate: return "Frecuencia respiratoria"
+            case .walkingRunningMeters: return "Distancia caminando/corriendo"
+            case .activeEnergyKcal: return "Energía activa"
             case .heartRate: return "Frecuencia cardíaca"
             case .hrvSDNN: return "HRV SDNN"
             case .steps: return "Pasos"
@@ -67,6 +72,10 @@ enum MeasurementValidation {
               m.start.timeIntervalSince1970 > 946684800, m.end <= now,
               (m.note?.count ?? 0) <= 4096 else { return false }
         switch m.kind {
+        case .bodyMassIndex: return (5...100).contains(m.value)
+        case .respiratoryRate: return (3...80).contains(m.value)
+        case .walkingRunningMeters: return (0...300000).contains(m.value) && m.end > m.start
+        case .activeEnergyKcal: return (0...20000).contains(m.value) && m.end > m.start
         case .heartRate: return (25...240).contains(m.value)
         case .hrvSDNN: return m.method.lowercased() == "sdnn" && (1...300).contains(m.value)
         case .steps: return (0...100000).contains(m.value) && m.value.rounded() == m.value && m.end > m.start

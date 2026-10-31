@@ -16,6 +16,11 @@ import UniformTypeIdentifiers
 }
 
 struct ContentView: View {
+    @EnvironmentObject var veepoo: VeepooCapabilityProbe
+    @EnvironmentObject var measurements: MeasurementStore
+    @EnvironmentObject var health: HealthBridge
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("syncVerifiedAutomatically") private var syncAutomatically = false
     @State private var tab = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--screen=") })?.replacingOccurrences(of: "--screen=", with: "") ?? "home"
     var body: some View {
         TabView(selection: $tab) {
@@ -24,6 +29,16 @@ struct ContentView: View {
             HistoryView().tabItem { Label("Historial", systemImage: "chart.xyaxis.line") }.tag("history")
             HealthView().tabItem { Label("Salud", systemImage: "heart.fill") }.tag("health")
             SettingsView().tabItem { Label("Ajustes", systemImage: "gearshape.fill") }.tag("settings")
+        }
+        .onChange(of: veepoo.historyRevision) { _, _ in
+            veepoo.extractHeartRatePreview()
+            measurements.addSDKPreview(veepoo.extractedMeasurements)
+        }
+        .onChange(of: measurements.records) { _, records in
+            if syncAutomatically { health.sync(records) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && syncAutomatically { health.sync(measurements.records) }
         }
     }
 }
@@ -194,6 +209,7 @@ struct HealthView: View {
     @EnvironmentObject var health: HealthBridge
     @EnvironmentObject var measurements: MeasurementStore
     @State private var consent = false
+    @AppStorage("syncVerifiedAutomatically") private var syncAutomatically = false
     var body: some View {
         NavigationStack {
             List {
@@ -211,7 +227,11 @@ struct HealthView: View {
                     Toggle("Autorizo transferir las muestras verificadas", isOn: $consent)
                     Button(health.isSyncing ? "Sincronizando…" : "Sincronizar con Salud", systemImage: "arrow.triangle.2.circlepath") { health.sync(measurements.records) }
                         .disabled(!consent || health.isSyncing || !measurements.records.contains(where: \.validated))
+                    Toggle("Enviar automáticamente las muestras verificadas", isOn: $syncAutomatically)
                     Text(health.lastResults).font(.caption)
+                    ForEach(Array(health.details.suffix(30).enumerated()), id: \.offset) { _, detail in
+                        Text(detail).font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Section("Qué debes saber") {
                     Label("Sin escritura de ECG ni estimaciones de glucosa, lípidos o ácido úrico", systemImage: "info.circle")
@@ -232,7 +252,7 @@ struct SettingsView: View {
             Form {
                 Section("Conexión") {
                     Toggle("Reconexión automática con el SDK", isOn: $veepoo.automaticReconnect)
-                    Text("Actúa durante la sesión de la app. La ejecución permanente en segundo plano no está validada.").font(.caption)
+                    Text("Se declara el modo Bluetooth en segundo plano para la conexión existente. iOS controla su ejecución; no se garantiza tras cierre forzado.").font(.caption)
                 }
                 Section("Fechas del historial") {
                     Picker("Zona del reloj", selection: $zone) {
@@ -256,7 +276,7 @@ struct SettingsView: View {
                     Button("Desconectar diagnóstico") { bluetooth.disconnect() }
                 }
                 Section("Acerca de") {
-                    LabeledContent("Versión candidata", value: "0.3")
+                    LabeledContent("Versión candidata", value: "0.4")
                     Text("A2 · firmware objetivo 02.52.01.00-5982")
                     Text("Sin validación física. Las capacidades mostradas proceden del reloj cuando se conecta, no de una lista de funciones supuestas.").font(.caption)
                 }

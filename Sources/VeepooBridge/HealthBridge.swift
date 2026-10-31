@@ -6,10 +6,14 @@ import HealthKit
     @Published private(set) var lastResults = "Sin transferencia"
     @Published private(set) var isSyncing = false
     private let store = HKHealthStore()
-    private let origin = "Veepoo Health Bridge"
+    @Published private(set) var details: [String] = []
 
     private var typeMapping: [(Measurement.Kind, HKQuantityTypeIdentifier, HKUnit, Double)] {
-        [(.heartRate, .heartRate, HKUnit.count().unitDivided(by: .minute()), 1),
+        [(.bodyMassIndex, .bodyMassIndex, .count(), 1),
+         (.respiratoryRate, .respiratoryRate, HKUnit.count().unitDivided(by: .minute()), 1),
+         (.walkingRunningMeters, .distanceWalkingRunning, .meter(), 1),
+         (.activeEnergyKcal, .activeEnergyBurned, .kilocalorie(), 1),
+         (.heartRate, .heartRate, HKUnit.count().unitDivided(by: .minute()), 1),
          (.hrvSDNN, .heartRateVariabilitySDNN, .secondUnit(with: .milli), 1),
          (.steps, .stepCount, .count(), 1),
          (.weightKg, .bodyMass, .gramUnit(with: .kilo), 1),
@@ -42,18 +46,26 @@ import HealthKit
         // Require explicit per-sample validation; never publish speculative biomarkers.
         let accepted = records.filter { $0.validated && $0.kind.writable && $0.source != "demo" }
         isSyncing = true
+        details = []
         Task {
             defer { isSyncing = false }
             var saved = 0, skipped = records.count - accepted.count, errors = 0
             for record in accepted {
-                guard isValid(record) else { skipped += 1; continue }
+                guard isValid(record) else {
+                    skipped += 1; details.append("\(record.kind.title): formato o intervalo no válido"); continue
+                }
                 guard let sample = sample(for: record),
-                      store.authorizationStatus(for: sample.sampleType) == .sharingAuthorized else { skipped += 1; continue }
+                      store.authorizationStatus(for: sample.sampleType) == .sharingAuthorized else {
+                    skipped += 1; details.append("\(record.kind.title): permiso de escritura no concedido"); continue
+                }
                 do {
-                    if try await alreadySaved(id: record.syncIdentity, type: sample.sampleType, date: record.start) { skipped += 1; continue }
+                    if (try? await alreadySaved(id: record.syncIdentity, type: sample.sampleType, date: record.start)) == true { skipped += 1; continue }
                     try await save(sample)
                     saved += 1
-                } catch { errors += 1 }
+                } catch {
+                    errors += 1
+                    details.append("\(record.kind.title): \(error.localizedDescription). Se conserva localmente para reintentar.")
+                }
             }
             lastResults = "Guardados: \(saved) · omitidos: \(skipped) · errores: \(errors)"
         }

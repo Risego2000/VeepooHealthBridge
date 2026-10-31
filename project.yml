@@ -4,8 +4,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: 5.9
-    MARKETING_VERSION: 0.3.0
-    CURRENT_PROJECT_VERSION: 3
+    MARKETING_VERSION: 0.4.0
+    CURRENT_PROJECT_VERSION: 4
     IPHONEOS_DEPLOYMENT_TARGET: '17.0'
 targets:
   VeepooHealthBridge:
@@ -22,6 +22,7 @@ targets:
         NSBluetoothAlwaysUsageDescription: Buscar y conectar el reloj A2 de forma local.
         NSHealthUpdateUsageDescription: Escribir en Salud de Apple las mediciones verificadas y autorizadas por ti.
         NSHealthShareUsageDescription: Consultar los registros autorizados para evitar duplicados.
+        UIBackgroundModes: [bluetooth-central]
         UILaunchScreen: {}
     entitlements:
       path: VeepooHealthBridge.entitlements

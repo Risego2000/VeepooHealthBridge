@@ -16,6 +16,7 @@ final class VeepooCapabilityProbe: ObservableObject {
     @Published private(set) var databaseSummary: [String] = []
     @Published private(set) var extractedMeasurements: [Measurement] = []
 
+    @Published private(set) var historyRevision = 0
     @Published private(set) var ready = false
     @Published private(set) var reading = false
     @Published private(set) var archiveURL: URL?
@@ -141,6 +142,7 @@ final class VeepooCapabilityProbe: ObservableObject {
                 guard let self, self.operationID == token else { return }
                 self.historyStatus = "\(category): estado \(state.rawValue), día \(current)/\(total), \(percent)%"
                 if state.rawValue == 2 || state.rawValue == 3 { self.reading = false }
+                if state.rawValue == 2 { self.historyRevision += 1 }
             }
         }
         switch category {
@@ -289,7 +291,7 @@ final class VeepooCapabilityProbe: ObservableObject {
             if let models = VPDataBaseOperation.veepooSDKGetDeviceOffStoreBodyComposition(withDate: day, andTableID: address) {
                 let rows: [[String: Any]] = models.map { model in
                     ["date": model.date, "testTime": model.testTime,
-                     "bodyFatPercentage": model.bodyFatPercentage, "leanBodyMass": model.leanBodyMass]
+                     "bodyFatPercentage": model.bodyFatPercentage, "leanBodyMass": model.leanBodyMass, "bmi": model.bmi]
                 }
                 output += decoder.bodyComposition(rows: rows)
             }

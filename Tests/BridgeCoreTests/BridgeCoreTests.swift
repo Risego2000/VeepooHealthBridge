@@ -91,4 +91,23 @@ final class BridgeCoreTests: XCTestCase {
         XCTAssertNotEqual(first.syncIdentity, second.syncIdentity)
     }
 
+    func testAdditionalHealthTypesRequireExplicitUnitsAndIntervals() {
+        var m = measurement(); m.kind = .activeEnergyKcal; m.value = 120
+        XCTAssertFalse(MeasurementValidation.accepts(m, now: now))
+        m.end = m.start.addingTimeInterval(300)
+        XCTAssertTrue(MeasurementValidation.accepts(m, now: now))
+        m.kind = .walkingRunningMeters; m.value = -1
+        XCTAssertFalse(MeasurementValidation.accepts(m, now: now))
+        m.kind = .respiratoryRate; m.value = 16
+        XCTAssertTrue(MeasurementValidation.accepts(m, now: now))
+        m.value = 0; XCTAssertFalse(MeasurementValidation.accepts(m, now: now))
+    }
+    func testBMIIsExplicitlyProfileDerivedWithoutInventedWeight() {
+        let d = VendorHistoryDecoder(device: "fixture", timeZone: TimeZone(secondsFromGMT: 0)!, now: now)
+        let r = d.bodyComposition(rows: [["date": "2026-10-30", "testTime": "12:00:00", "bmi": "24.2"]])
+        XCTAssertEqual(r.count, 1); XCTAssertEqual(r[0].kind, .bodyMassIndex)
+        XCTAssertTrue(r[0].method.contains("profile-derived"))
+        XCTAssertFalse(r[0].validated)
+    }
+
 }
