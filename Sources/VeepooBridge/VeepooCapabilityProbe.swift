@@ -29,6 +29,7 @@ final class VeepooCapabilityProbe: ObservableObject {
         manager.veepooSDKStartScanDeviceAndReceiveScanningDevice { [weak self] model in
             Task { @MainActor in
                 guard let self else { return }
+                guard let model else { return }
                 let label = (model.deviceName ?? "Dispositivo") + " · " + (model.deviceAddress ?? "sin dirección")
                 if !self.discovered.contains(label) {
                     self.models.append(model)
