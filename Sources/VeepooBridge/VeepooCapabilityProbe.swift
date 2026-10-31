@@ -135,6 +135,15 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
     }
 
+    func deleteManualRecords() -> Bool {
+        disconnect()
+        do {
+            if FileManager.default.fileExists(atPath: manualFileURL.path) { try FileManager.default.removeItem(at: manualFileURL) }
+            manualRecords = [:]; archiveURL = nil
+            return true
+        } catch { historyStatus = "No se pudo borrar el archivo manual: \(error.localizedDescription)"; return false }
+    }
+
     private var manualFileURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("manualMeasurements.json")
@@ -402,6 +411,7 @@ final class VeepooCapabilityProbe: ObservableObject {
 
     #else
     init() {}
+    func deleteManualRecords() -> Bool { true }
     func readManualHistory() { historyStatus = "El SDK no está enlazado." }
     func disconnect() {}
     func readHistory(category: String) { historyStatus = "El SDK no está enlazado." }

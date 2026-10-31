@@ -149,6 +149,7 @@ struct DeviceView: View {
 }
 
 struct HistoryView: View {
+    @EnvironmentObject var veepoo: VeepooCapabilityProbe
     @EnvironmentObject var measurements: MeasurementStore
     @State private var importing = false
     @State private var exportURL: URL?
@@ -190,7 +191,10 @@ struct HistoryView: View {
                     }
                 }
                 .confirmationDialog("Borrar historial local", isPresented: $deleting) {
-                    Button("Borrar", role: .destructive) { measurements.deleteAll() }
+                    Button("Borrar", role: .destructive) {
+                        measurements.deleteAll()
+                        if !veepoo.deleteManualRecords() { measurements.message = veepoo.historyStatus }
+                    }
                 } message: { Text("Los datos enviados a Salud y la base del SDK no se eliminan con esta acción.") }
                 .sheet(item: $verifying) { record in
                     NavigationStack {
