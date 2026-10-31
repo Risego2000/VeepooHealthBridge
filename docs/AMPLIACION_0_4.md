@@ -1,5 +1,7 @@
 # Ampliación 0.4.0 — alcance real
 
+Se añade un visor nativo de solo lectura de las categorías y campos del archivo real del SDK, con expansión y paginación de arrays. No se rellenan campos ausentes.
+
 Cambios implementados: incorporación automática al historial al finalizar lecturas SDK, envío automático opcional de muestras verificadas, reintento al volver al primer plano, cola para cambios durante un envío, diagnóstico de permisos/errores y soporte BMI. Se añaden mapeos HealthKit para energía activa en kcal, distancia caminando/corriendo en metros y frecuencia respiratoria por minuto cuando la fuente los aporte explícitamente. Estos tres mapeos no implican una extracción nueva demostrada del A2: no se infieren unidades ni se fabrican registros. El IMC recuperado del modelo corporal se etiqueta como derivado de perfil. Se declara bluetooth-central; esto no configura restauración interna del SDK, no acredita segundo plano físico y no garantiza ejecución permanente.
 
 La compilación oficial de dispositivo pasa a Release. Las pruebas añaden controles para las nuevas categorías y el origen del IMC. Los resultados de esta revisión se documentan tras ejecutar Actions; los de 0.3 no prueban la 0.4.

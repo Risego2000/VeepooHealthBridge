@@ -95,6 +95,7 @@ struct SummaryTile: View {
 
 struct DeviceView: View {
     @State private var password = "0000"
+    @State private var showingRawArchive = false
     @EnvironmentObject var veepoo: VeepooCapabilityProbe
     @EnvironmentObject var measurements: MeasurementStore
     @EnvironmentObject var bluetooth: BluetoothScanner
@@ -129,12 +130,18 @@ struct DeviceView: View {
                 }
                 Section("Diagnóstico de la base de datos") {
                     Button("Preparar archivo privado del SDK") { veepoo.exportSDKArchive() }
-                    if let url = veepoo.archiveURL { ShareLink("Compartir datos sanitarios brutos", item: url) }
+                    if let url = veepoo.archiveURL {
+                        Button("Examinar todas las categorías del archivo") { showingRawArchive = true }
+                        ShareLink("Compartir datos sanitarios brutos", item: url)
+                    }
                     Text("El archivo conserva HRV sin método SDNN, sueño preciso y presión con nombres de campos ambiguos. No se envían a Salud.").font(.caption)
                     Button("Inspeccionar recuentos") { veepoo.inspectSDKDatabase() }
                     ForEach(veepoo.databaseSummary, id: \.self) { Text($0).font(.caption) }
                 }
             }.navigationTitle("Tu reloj")
+                .sheet(isPresented: $showingRawArchive) {
+                    if let url = veepoo.archiveURL { RawArchiveView(url: url) }
+                }
         }
     }
 }
@@ -307,6 +314,68 @@ struct MeasurementChart: View {
                     PointMark(x: .value("Fecha", sample.start), y: .value("Valor", sample.value))
                 }.frame(height: 180).foregroundStyle(.teal)
                 Text("Hasta 500 muestras. Oxígeno en fracción 0–1; temperatura en °C; frecuencia en lpm; pasos por intervalo.").font(.caption)
+            }
+        }
+    }
+}
+
+
+/// Read-only presentation of real vendor records, including fields with no HealthKit equivalent.
+struct RawArchiveView: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+    @State private var object: [String: Any] = [:]
+    @State private var error: String?
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("Datos originales del SDK. Los nombres y valores del fabricante no constituyen un diagnóstico ni implican que puedan enviarse a Salud.").font(.footnote)
+                    if let error { Text(error).foregroundStyle(.red) }
+                }
+                ForEach(object.keys.sorted(), id: \.self) { key in
+                    RawJSONNode(label: key, value: object[key] ?? NSNull(), depth: 0)
+                }
+            }.navigationTitle("Datos originales")
+                .toolbar { Button("Cerrar") { dismiss() } }
+                .task {
+                    do {
+                        let data = try Data(contentsOf: url)
+                        object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+                    } catch { self.error = error.localizedDescription }
+                }
+        }
+    }
+}
+
+struct RawJSONNode: View {
+    let label: String
+    let value: Any
+    let depth: Int
+    @State private var limit = 50
+    var body: some View {
+        Group {
+            if depth >= 12 {
+                Text("\(label): nivel máximo de visualización; consulta el archivo exportado").font(.caption)
+            } else if let dictionary = value as? [String: Any] {
+                DisclosureGroup("\(label) · \(dictionary.count) campos") {
+                    ForEach(Array(dictionary.keys.sorted().prefix(limit)), id: \.self) { key in
+                        AnyView(RawJSONNode(label: key, value: dictionary[key] ?? NSNull(), depth: depth + 1))
+                    }
+                    if dictionary.count > limit { Button("Mostrar más campos") { limit += 50 } }
+                }
+            } else if let array = value as? [Any] {
+                DisclosureGroup("\(label) · \(array.count) elementos") {
+                    ForEach(0..<min(limit, array.count), id: \.self) { index in
+                        AnyView(RawJSONNode(label: "[\(index)]", value: array[index], depth: depth + 1))
+                    }
+                    if array.count > limit { Button("Mostrar 50 elementos más") { limit += 50 } }
+                }
+            } else {
+                VStack(alignment: .leading) {
+                    Text(label).font(.caption).foregroundStyle(.secondary)
+                    Text(String(describing: value)).textSelection(.enabled)
+                }
             }
         }
     }
