@@ -19,3 +19,14 @@ Los requisitos de cuenta, firma, perfil HealthKit y distribución son independie
 Fuentes: https://developer.apple.com/documentation/healthkit/hkelectrocardiogramtype y https://developer.apple.com/documentation/technotes/tn3115-bluetooth-state-restoration-app-relaunch-rules
 
 Se incorpora la API oficial readManualTestData(withTimestamp:dataType:result:), pidiendo únicamente la máscara supportManualTestType anunciada. El resultado manual queda disponible en el archivo privado y en su visor. Se guarda además en un archivo protegido de Application Support, excluido de backup, separado por dirección de dispositivo; no se declaran conversiones a Salud de sus campos sin unidades confirmadas. La cobertura comprende solo los modelos reconocidos por el esquema de cabeceras fijado; clases desconocidas se identifican explícitamente. No hay prueba física de esta API en A2.
+
+## Evidencia de la revisión final
+
+Código validado: `668e74872823627e45a6566fc8a18ceaa56b1a32`.
+
+- SDK oficial y aplicación en Release para iPhone: workflow completo correcto, empaquetado de candidata sin firma incluido: https://github.com/Risego2000/VeepooHealthBridge/actions/runs/41172634812
+- 14 pruebas del núcleo, compilación de simulador y compilación iPhone sin SDK: pasos correctos en https://github.com/Risego2000/VeepooHealthBridge/actions/runs/41172634828. La fase opcional de capturas es independiente de esos resultados.
+- API de lecturas manuales, esquema de modelos, persistencia y visor: compilados; sin prueba física con A2.
+- Escritura real en Salud, recuperación completa del A2, firma del titular y distribución TestFlight: no realizadas.
+
+No se afirma «todas las mediciones del A2 a Salud» ni «únicamente pendiente de Apple». La cobertura real del firmware y la equivalencia de los campos necesitan comprobación física; ECG y otros campos sin tipo escribible mantienen sus límites aunque la firma esté disponible.

@@ -1,3 +1,5 @@
+> **Revisión vigente 0.4.0:** consulta [AMPLIACION_0_4.md](docs/AMPLIACION_0_4.md). Incluye lectura manual por capacidades anunciadas, visor de datos originales, IMC, sincronización opcional de muestras verificadas, cola de envío y declaración BLE en segundo plano. 14 pruebas del núcleo y compilación Release con SDK oficial verificadas. Sin validación física del A2 ni distribución firmada. El informe 0.3 siguiente conserva la evidencia de la versión anterior.
+
 # Veepoo Health Bridge · candidata 0.3
 
 App **nativa de iPhone**, SwiftUI, para evaluar la recuperación del historial de un A2 y la transferencia selectiva a Apple Health. Firmware objetivo comunicado por el usuario: **02.52.01.00-5982**. No se afirma compatibilidad física antes de probarlo.
