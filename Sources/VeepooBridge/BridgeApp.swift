@@ -3,16 +3,18 @@ import UniformTypeIdentifiers
 
 @main struct VeepooHealthBridgeApp: App {
     @StateObject private var bluetooth = BluetoothScanner()
+    @StateObject private var veepoo = VeepooCapabilityProbe()
     @StateObject private var health = HealthBridge()
     @StateObject private var measurements = MeasurementStore()
     var body: some Scene {
         WindowGroup { ContentView()
-            .environmentObject(bluetooth).environmentObject(health).environmentObject(measurements) }
+            .environmentObject(bluetooth).environmentObject(veepoo).environmentObject(health).environmentObject(measurements) }
     }
 }
 
 struct ContentView: View {
     @EnvironmentObject var bluetooth: BluetoothScanner
+    @EnvironmentObject var veepoo: VeepooCapabilityProbe
     @EnvironmentObject var health: HealthBridge
     @EnvironmentObject var measurements: MeasurementStore
     @State private var importing = false
@@ -30,7 +32,9 @@ struct ContentView: View {
                         Text("Servicios GATT: " + bluetooth.services.joined(separator: ", "))
                             .font(.caption).textSelection(.enabled)
                     }
-                    LabeledContent("SDK Veepoo", value: "Adaptador pendiente")
+                    LabeledContent("SDK Veepoo", value: veepoo.status)
+                    Button("Buscar con SDK Veepoo") { veepoo.scan() }
+                    ForEach(veepoo.capabilities, id: \.self) { Text($0) }
                     LabeledContent("HealthKit", value: health.status)
                     Text("No se generan ni simulan mediciones. El escaneo no lee registros del reloj.")
                         .font(.footnote).foregroundStyle(.secondary)
