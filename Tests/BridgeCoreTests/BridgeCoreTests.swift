@@ -80,4 +80,15 @@ final class BridgeCoreTests: XCTestCase {
         XCTAssertTrue(d.accurateSleep(rows: [invalid]).isEmpty)
     }
 
+    func testSameSourceIntervalDeduplicatesEvenWhenExternalIDChanges() {
+        let first = measurement()
+        var second = first; second.id = "changed-export-id"
+        let result = MeasurementValidation.merge([], incoming: [first, second], now: now)
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(first.syncIdentity, second.syncIdentity)
+        second.source = "another physical source"
+        XCTAssertEqual(MeasurementValidation.merge([], incoming: [first, second], now: now).count, 2)
+        XCTAssertNotEqual(first.syncIdentity, second.syncIdentity)
+    }
+
 }

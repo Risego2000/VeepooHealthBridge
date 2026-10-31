@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 // Values are never manufactured; only imported from a genuine source.
 struct Measurement: Codable, Identifiable, Hashable {
@@ -42,6 +43,13 @@ struct Measurement: Codable, Identifiable, Hashable {
     var method: String // SDNN required for HRV; never equate RMSSD to SDNN
     var validated: Bool // user verification against an independent reference, where applicable
     var note: String?
+
+    /// Identity of one source interval, independent of an importer's mutable external ID.
+    var syncIdentity: String {
+        let parts = [source, kind.rawValue, String(start.timeIntervalSince1970), String(end.timeIntervalSince1970)]
+        let bytes = (try? JSONEncoder().encode(parts)) ?? Data()
+        return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    }
 }
 
 struct ImportEnvelope: Codable {
@@ -76,7 +84,9 @@ enum MeasurementValidation {
 
     static func merge(_ existing: [Measurement], incoming: [Measurement], now: Date = Date()) -> [Measurement] {
         var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { old, _ in old })
+        var intervals = Set(existing.map(\.syncIdentity))
         for var record in incoming where accepts(record, now: now) && byID[record.id] == nil {
+            guard intervals.insert(record.syncIdentity).inserted else { continue }
             // Trust is established inside the app, never by a JSON file or SDK callback.
             record.validated = false
             byID[record.id] = record

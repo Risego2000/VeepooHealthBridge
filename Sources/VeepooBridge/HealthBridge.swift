@@ -50,7 +50,7 @@ import HealthKit
                 guard let sample = sample(for: record),
                       store.authorizationStatus(for: sample.sampleType) == .sharingAuthorized else { skipped += 1; continue }
                 do {
-                    if try await alreadySaved(id: record.id, type: sample.sampleType, date: record.start) { skipped += 1; continue }
+                    if try await alreadySaved(id: record.syncIdentity, type: sample.sampleType, date: record.start) { skipped += 1; continue }
                     try await save(sample)
                     saved += 1
                 } catch { errors += 1 }
@@ -65,7 +65,7 @@ import HealthKit
 
     private func sample(for m: Measurement) -> HKSample? {
         let metadata: [String: Any] = [HKMetadataKeyExternalUUID: m.id,
-            HKMetadataKeySyncIdentifier: "veepoo-bridge-\(m.id)", HKMetadataKeySyncVersion: 1,
+            HKMetadataKeySyncIdentifier: "veepoo-bridge-\(m.syncIdentity)", HKMetadataKeySyncVersion: 1,
             "DeviceOrigin": m.source, "DeviceMethod": m.method]
         if m.kind == .sleepAsleep {
             guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return nil }
