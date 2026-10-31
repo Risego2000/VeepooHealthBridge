@@ -36,6 +36,7 @@ final class VeepooCapabilityProbe: ObservableObject {
     #if canImport(VeepooBleSDK)
     private let manager = VPBleCentralManage.sharedBleManager()
     private var models: [VPPeripheralModel] = []
+    private var connectionWanted = false
 
     init() {
         status = "VeepooBleSDK disponible: inicia búsqueda"
@@ -44,7 +45,7 @@ final class VeepooCapabilityProbe: ObservableObject {
         manager?.vpBleConnectStateChangeBlock = { [weak self] state in
             Task { @MainActor in
                 guard let self else { return }
-                self.ready = state.rawValue == 3
+                self.ready = self.connectionWanted && state.rawValue == 3
                 if state.rawValue == 0 { self.reading = false; self.status = "Desconectado; reconexión según configuración" }
                 if state.rawValue == 4 { self.status = "Contraseña rechazada por el reloj" }
             }
@@ -77,6 +78,7 @@ final class VeepooCapabilityProbe: ObservableObject {
         guard password.count == 4, password.allSatisfy({ $0.isASCII && $0.isNumber }) else {
             status = "La contraseña debe tener cuatro cifras"; return
         }
+        connectionWanted = true
         ready = false
         extractedMeasurements = []
         databaseSummary = []
@@ -89,6 +91,7 @@ final class VeepooCapabilityProbe: ObservableObject {
         manager.veepooSDKConnectDevice(device) { [weak self] state in
             Task { @MainActor in
                 guard let self else { return }
+                guard self.connectionWanted else { return }
                 self.ready = state.rawValue == 4
                 self.status = self.ready ? "Conectado y contraseña verificada" : "Estado de conexión SDK: \(state)"
                 guard let model = self.manager?.peripheralModel else { return }
@@ -158,6 +161,14 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
     }
 
+    /// KVC keys are an explicit allowlist of public properties in the pinned SDK headers.
+    /// Values are preserved without inferring clinical units or invoking a vendor diagnosis.
+    private func snapshot(_ model: NSObject, keys: [String]) -> [String: Any] {
+        var result: [String: Any] = [:]
+        for key in keys { if let value = model.value(forKey: key) { result[key] = value } }
+        return result
+    }
+
     func exportSDKArchive() {
         guard !reading, ready, let address = manager?.peripheralModel?.deviceAddress, !address.isEmpty else {
             historyStatus = "Conecta el reloj y espera al fin de la lectura antes de archivar."
@@ -174,33 +185,25 @@ final class VeepooCapabilityProbe: ObservableObject {
             guard let instant = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
             let day = formatter.string(from: instant)
             let accurate = VPDataBaseOperation.veepooSDKGetAccurateSleepData(withDate: day, andTableID: address) ?? []
-            let sleep: [[String: Any]] = accurate.map { model in
-                ["sleepTime": model.sleepTime, "wakeTime": model.wakeTime,
-                 "sleepLine": model.sleepLine, "onePointDuration": model.onePointDuration,
-                 "sleepDuration": model.sleepDuration, "accurateType": model.accurateType]
-            }
+            let sleep = accurate.map { snapshot($0, keys: [
+                "sleepType", "sleepTime", "wakeTime", "sleepTag", "getUpScore", "deepScore",
+                "sleepEfficiencyScore", "fallAsleepScore", "sleepTimeScore", "exitSleepMode", "sleepQuality",
+                "getUpTimes", "deepAndLightMode", "sleepDuration", "deepDuration", "lightDuration",
+                "getUpDuration", "otherDuration", "firstDeepDuration", "getUpToDeepAve", "onePointDuration",
+                "accurateType", "insomniaTag", "insomniaScore", "insomniaTimes", "insomniaRecord",
+                "sleepLine", "insomniaDuration", "lastType", "nextType", "mac"]) }
             let composition = VPDataBaseOperation.veepooSDKGetDeviceOffStoreBodyComposition(withDate: day, andTableID: address) ?? []
-            let bodies: [[String: Any]] = composition.map { model in
-                ["date": model.date, "testTime": model.testTime, "bodyFatPercentage": model.bodyFatPercentage,
-                 "leanBodyMass": model.leanBodyMass, "fatMass": model.fatMass,
-                 "muscleMass": model.muscleMass, "bodyMoisture": model.bodyMoisture]
-            }
+            let bodies = composition.map { snapshot($0, keys: [
+                "date", "testTime", "isDeviceTest", "stature", "weight", "gender", "bmi",
+                "bodyFatPercentage", "fatMass", "leanBodyMass", "muscleRate", "muscleMass",
+                "subcutaneousFat", "bodyMoisture", "waterContent", "skeletalMuscleRate", "boneMass",
+                "proportionOfProtein", "proteinAmount", "basalMetabolicRate"]) }
             let ecgs = VPDataBaseOperation.veepooSDKGetDeviceOffStoreECG(withDate: day, andTableID: address) ?? []
-            let traces: [[String: Any]] = ecgs.map { model in
-                var trace: [String: Any] = [:]
-                trace["date"] = model.date ?? ""
-                trace["testTime"] = model.testTime ?? ""
-                trace["type"] = model.type ?? ""
-                trace["ecgType"] = model.ecgType ?? ""
-                trace["duration"] = model.duration ?? ""
-                trace["frequency"] = model.frequency ?? ""
-                trace["uploadFrequency"] = model.uploadFrequency ?? ""
-                trace["filterSignals"] = model.filterSignals ?? []
-                trace["originalSignals"] = model.originalSignals ?? []
-                trace["rrs"] = model.rrs ?? []
-                trace["qts"] = model.qts ?? []
-                return trace
-            }
+            let traces = ecgs.map { snapshot($0, keys: [
+                "type", "ecgType", "date", "testTime", "duration", "mac", "state", "aveHeart", "aveHrv",
+                "aveResRate", "aveQT", "avePWV", "originalSignals", "filterSignals", "hearts", "hrvs",
+                "rrs", "resRates", "qts", "pwvs", "lead", "result1", "result2", "result3", "result4",
+                "result5", "result6", "result7", "result8", "multipleDiagnosisTempStr", "frequency", "uploadFrequency"]) }
             let analysis = VPDataBaseOperation.veepooSDKGetDeviceBloodAnalysisData(withDate: day, andTableID: address) ?? []
             let estimates: [[String: Any]] = analysis.map { model in
                 ["time": model.time, "totalCholesterols": model.totalCholesterols,
@@ -309,6 +312,7 @@ final class VeepooCapabilityProbe: ObservableObject {
 
     func disconnect() {
         operationID = UUID()
+        connectionWanted = false
         ready = false
         reading = false
         manager?.veepooSDKStopScanDevice()
