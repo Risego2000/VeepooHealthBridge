@@ -187,10 +187,19 @@ final class VeepooCapabilityProbe: ObservableObject {
             }
             let ecgs = VPDataBaseOperation.veepooSDKGetDeviceOffStoreECG(withDate: day, andTableID: address) ?? []
             let traces: [[String: Any]] = ecgs.map { model in
-                ["date": model.date ?? "", "testTime": model.testTime ?? "", "type": model.type ?? "",
-                 "ecgType": model.ecgType ?? "", "duration": model.duration ?? "", "frequency": model.frequency ?? "",
-                 "uploadFrequency": model.uploadFrequency ?? "", "filterSignals": model.filterSignals ?? [],
-                 "originalSignals": model.originalSignals ?? [], "rrs": model.rrs ?? [], "qts": model.qts ?? []]
+                var trace: [String: Any] = [:]
+                trace["date"] = model.date ?? ""
+                trace["testTime"] = model.testTime ?? ""
+                trace["type"] = model.type ?? ""
+                trace["ecgType"] = model.ecgType ?? ""
+                trace["duration"] = model.duration ?? ""
+                trace["frequency"] = model.frequency ?? ""
+                trace["uploadFrequency"] = model.uploadFrequency ?? ""
+                trace["filterSignals"] = model.filterSignals ?? []
+                trace["originalSignals"] = model.originalSignals ?? []
+                trace["rrs"] = model.rrs ?? []
+                trace["qts"] = model.qts ?? []
+                return trace
             }
             let analysis = VPDataBaseOperation.veepooSDKGetDeviceBloodAnalysisData(withDate: day, andTableID: address) ?? []
             let estimates: [[String: Any]] = analysis.map { model in
