@@ -6,38 +6,27 @@ workflows:
     environment:
       xcode: latest
     scripts:
-      - name: Install XcodeGen
-        script: |
-          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
-      - name: Generate Xcode project
-        script: |
-          xcodegen generate
-      - name: Compile for iPhone (unsigned, diagnostic only)
-        script: |
-          set -o pipefail
-          xcodebuild -project VeepooHealthBridge.xcodeproj \
-            -scheme VeepooHealthBridge \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$CM_BUILD_DIR/derived" \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$CM_BUILD_DIR/ios-build.log"
-      - name: Compile iOS Simulator
-        script: |
-          set -o pipefail
-          xcodebuild -project VeepooHealthBridge.xcodeproj \
-            -scheme VeepooHealthBridge \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$CM_BUILD_DIR/derived-simulator" \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$CM_BUILD_DIR/simulator-build.log"
-    artifacts:
-      - ios-build.log
-      - simulator-build.log
-      - derived/Build/Products/Release-iphoneos/*.app
-      - derived-simulator/Build/Products/Debug-iphonesimulator/*.app
+    - name: Install XcodeGen
+      script: 'brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
 
+        '
+    - name: Generate Xcode project
+      script: 'xcodegen generate
+
+        '
+    - name: Compile for iPhone (unsigned, diagnostic only)
+      script: "set -o pipefail\nxcodebuild -project VeepooHealthBridge.xcodeproj \\\n  -scheme VeepooHealthBridge \\\n  -configuration\
+        \ Release \\\n  -sdk iphoneos \\\n  -destination 'generic/platform=iOS' \\\n  -derivedDataPath \"$CM_BUILD_DIR/derived\" \\\n\
+        \  CODE_SIGNING_ALLOWED=NO build 2>&1 | tee \"$CM_BUILD_DIR/ios-build.log\"\n"
+    - name: Compile iOS Simulator
+      script: "set -o pipefail\nxcodebuild -project VeepooHealthBridge.xcodeproj \\\n  -scheme VeepooHealthBridge \\\n  -configuration\
+        \ Debug \\\n  -sdk iphonesimulator \\\n  -destination 'generic/platform=iOS Simulator' \\\n  -derivedDataPath \"$CM_BUILD_DIR/derived-simulator\"\
+        \ \\\n  CODE_SIGNING_ALLOWED=NO build 2>&1 | tee \"$CM_BUILD_DIR/simulator-build.log\"\n"
+    artifacts:
+    - ios-build.log
+    - simulator-build.log
+    - derived/Build/Products/Release-iphoneos/*.app
+    - derived-simulator/Build/Products/Debug-iphonesimulator/*.app
   ios-veepoo-sdk:
     name: Veepoo Bridge - SDK real iPhone (unsigned)
     max_build_duration: 60
@@ -45,62 +34,88 @@ workflows:
     environment:
       xcode: 16.4
     scripts:
-      - name: Install tooling and fetch official Veepoo SDK
-        script: |
-          set -e
-          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
-          git clone https://github.com/HBandSDK/iOS_Ble_SDK.git /tmp/veepoo-vendor
-          git -C /tmp/veepoo-vendor checkout c1ec1363c659deaa483778315b86e680f8f81af0
-          mkdir -p Vendor
-          cp -R /tmp/veepoo-vendor/iOS_sdk_source/Framework/2.0.43.15/VeepooBleSDK.framework Vendor/
-          cp -R /tmp/veepoo-vendor/iOS_sdk_source/Demo/VeepooBleSDKDemo/VeepooBleSDKDemo/GRDFUSDK.framework Vendor/
-      - name: Configure Xcode project and vendor dependencies
-        script: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path("project.yml")
-          s=p.read_text()
-          marker = "    settings:" + chr(10) + "      base:" + chr(10) + "        PRODUCT_BUNDLE_IDENTIFIER:"
-          replacement = "    dependencies:" + chr(10) + "      - framework: Vendor/VeepooBleSDK.framework" + chr(10) + "        embed: false" + chr(10) + "      - framework: Vendor/GRDFUSDK.framework" + chr(10) + "        embed: false" + chr(10) + marker
-          assert marker in s, "Target settings marker not found"
-          s = s.replace(marker, replacement, 1)
-          p.write_text(s)
-          PY
-          xcodegen generate
-          cat > Podfile <<'PODS'
-          platform :ios, '17.0'
-          use_frameworks!
-          target 'VeepooHealthBridge' do
-            pod 'AFNetworking', '~> 4.0'
-            pod 'FMDB', '~> 2.7'
-            pod 'iOSDFULibrary'
-          end
-          PODS
-          pod install
-      - name: Compile app with actual Veepoo SDK for iPhone
-        script: |
-          set -o pipefail
-          xcodebuild -workspace VeepooHealthBridge.xcworkspace \
-            -scheme VeepooHealthBridge \
-            -configuration Debug \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$CM_BUILD_DIR/derived-vendor" \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$CM_BUILD_DIR/vendor-build.log"
-      - name: Package unsigned IPA for external personal signing
-        script: |
-          set -euo pipefail
-          APP="$CM_BUILD_DIR/derived-vendor/Build/Products/Debug-iphoneos/VeepooHealthBridge.app"
-          test -d "$APP"
-          test -f "$APP/Info.plist"
-          test -f "$APP/VeepooHealthBridge"
-          mkdir -p "$CM_BUILD_DIR/ipa-staging/Payload"
-          ditto "$APP" "$CM_BUILD_DIR/ipa-staging/Payload/VeepooHealthBridge.app"
-          cd "$CM_BUILD_DIR/ipa-staging"
-          /usr/bin/zip -qry "$CM_BUILD_DIR/VeepooHealthBridge-UNSIGNED.ipa" Payload
-          /usr/bin/unzip -tq "$CM_BUILD_DIR/VeepooHealthBridge-UNSIGNED.ipa"
-          echo "Created unsigned IPA. This archive MUST be signed/provisioned before installation."
+    - name: Prepare pinned official Veepoo SDK 2.2.110.15
+      script: bash scripts/prepare-vendor.sh
+    - name: Compile app with actual Veepoo SDK for iPhone
+      script: "set -o pipefail\nxcodebuild -workspace VeepooHealthBridge.xcworkspace \\\n  -scheme VeepooHealthBridge \\\n  -configuration\
+        \ Debug \\\n  -sdk iphoneos \\\n  -destination 'generic/platform=iOS' \\\n  -derivedDataPath \"$CM_BUILD_DIR/derived-vendor\"\
+        \ \\\n  CODE_SIGNING_ALLOWED=NO build 2>&1 | tee \"$CM_BUILD_DIR/vendor-build.log\"\n"
+    - name: Package unsigned IPA for external personal signing
+      script: 'set -euo pipefail
+
+        APP="$CM_BUILD_DIR/derived-vendor/Build/Products/Debug-iphoneos/VeepooHealthBridge.app"
+
+        test -d "$APP"
+
+        test -f "$APP/Info.plist"
+
+        test -f "$APP/VeepooHealthBridge"
+
+        mkdir -p "$CM_BUILD_DIR/ipa-staging/Payload"
+
+        ditto "$APP" "$CM_BUILD_DIR/ipa-staging/Payload/VeepooHealthBridge.app"
+
+        cd "$CM_BUILD_DIR/ipa-staging"
+
+        /usr/bin/zip -qry "$CM_BUILD_DIR/VeepooHealthBridge-UNSIGNED.ipa" Payload
+
+        /usr/bin/unzip -tq "$CM_BUILD_DIR/VeepooHealthBridge-UNSIGNED.ipa"
+
+        echo "Created unsigned IPA. This archive MUST be signed/provisioned before installation."
+
+        '
     artifacts:
-      - vendor-build.log
-      - VeepooHealthBridge-UNSIGNED.ipa
-      - derived-vendor/Build/Products/Debug-iphoneos/VeepooHealthBridge.app/**
+    - vendor-build.log
+    - VeepooHealthBridge-UNSIGNED.ipa
+    - derived-vendor/Build/Products/Debug-iphoneos/VeepooHealthBridge.app/**
+  ios-testflight-candidate:
+    name: Veepoo Bridge - signed TestFlight candidate
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: org.veepoobridge.ios
+    scripts:
+    - name: Prepare pinned official Veepoo SDK 2.2.110.15
+      script: bash scripts/prepare-vendor.sh
+    - name: Test conversion and validation core
+      script: swift test --parallel
+    - name: Apply authorized provisioning profiles
+      script: xcode-project use-profiles
+    - name: Build signed archive and IPA
+      script: xcode-project build-ipa --workspace "$CM_BUILD_DIR/VeepooHealthBridge.xcworkspace" --scheme VeepooHealthBridge
+    - name: Verify signed HealthKit entitlement
+      script: 'set -euo pipefail
+
+        IPA=$(find build/ios/ipa -name ''*.ipa'' -print -quit)
+
+        test -n "$IPA"
+
+        unzip -q "$IPA" -d signed-validation
+
+        APP=$(find signed-validation/Payload -maxdepth 1 -name ''*.app'' -print -quit)
+
+        codesign --verify --deep --strict "$APP"
+
+        codesign -d --entitlements :- "$APP" > signed-entitlements.plist
+
+        /usr/libexec/PlistBuddy -c ''Print :com.apple.developer.healthkit'' signed-entitlements.plist | grep -qx true
+
+        security cms -D -i "$APP/embedded.mobileprovision" > signed-profile.plist
+
+        /usr/libexec/PlistBuddy -c ''Print :Entitlements:com.apple.developer.healthkit'' signed-profile.plist | grep -qx true
+
+        '
+    artifacts:
+    - build/ios/ipa/*.ipa
+    - /tmp/xcodebuild_logs/*.log
+    integrations:
+      app_store_connect: Veepoo Apple Developer
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false

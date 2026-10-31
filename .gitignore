@@ -8,3 +8,6 @@ derived*/
 *.mobileprovision
 AuthKey_*.p8
 *.ipa
+signed-validation/
+signed-entitlements.plist
+signed-profile.plist

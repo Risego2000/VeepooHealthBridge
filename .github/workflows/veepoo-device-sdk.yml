@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/veepoo-device-sdk.yml'
       - 'Sources/**'
+      - 'scripts/**'
       - 'codemagic.yaml'
       - 'project.yml'
 permissions:
@@ -16,43 +17,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Obtain official vendor framework
-        shell: bash
-        run: |
-          set -euo pipefail
-          git clone https://github.com/HBandSDK/iOS_Ble_SDK.git /tmp/veepoo-vendor
-          git -C /tmp/veepoo-vendor checkout c1ec1363c659deaa483778315b86e680f8f81af0
-          mkdir -p Vendor
-          cp -R /tmp/veepoo-vendor/iOS_sdk_source/Framework/2.0.43.15/VeepooBleSDK.framework Vendor/
-          cp -R /tmp/veepoo-vendor/iOS_sdk_source/Demo/VeepooBleSDKDemo/VeepooBleSDKDemo/GRDFUSDK.framework Vendor/
-          file Vendor/VeepooBleSDK.framework/VeepooBleSDK
-          lipo -info Vendor/VeepooBleSDK.framework/VeepooBleSDK
-      - name: Install XcodeGen
-        run: brew install xcodegen
-      - name: Inject framework into generated project
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('project.yml')
-          s=p.read_text()
-          s=s.replace('    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER:', '    dependencies:\n      - framework: Vendor/VeepooBleSDK.framework\n        embed: false\n      - framework: Vendor/GRDFUSDK.framework\n        embed: false\n    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER:')
-          p.write_text(s)
-          PY
-          xcodegen generate
-      - name: Install vendor dependency pods
-        shell: bash
-        run: |
-          cat > Podfile <<'PODS'
-          platform :ios, '17.0'
-          use_frameworks!
-          target 'VeepooHealthBridge' do
-            pod 'AFNetworking', '~> 4.0'
-            pod 'FMDB', '~> 2.7'
-            pod 'iOSDFULibrary'
-          end
-          PODS
-          pod install
+      - name: Prepare pinned official SDK 2.2.110.15 and dependencies
+        run: bash scripts/prepare-vendor.sh
       - name: Compile actual SDK import for iOS device
         shell: bash
         run: |

@@ -43,9 +43,9 @@ final class VeepooCapabilityProbe: ObservableObject {
         manager?.vpBleConnectStateChangeBlock = { [weak self] state in
             Task { @MainActor in
                 guard let self else { return }
-                self.ready = state.rawValue == 2
+                self.ready = state.rawValue == 3
                 if state.rawValue == 0 { self.reading = false; self.status = "Desconectado; reconexión según configuración" }
-                if state.rawValue == 3 { self.status = "Contraseña rechazada por el reloj" }
+                if state.rawValue == 4 { self.status = "Contraseña rechazada por el reloj" }
             }
         }
     }
@@ -93,6 +93,8 @@ final class VeepooCapabilityProbe: ObservableObject {
                     "Sueño: \(model.sleepType)",
                     "Oxígeno: \(model.oxygenType)",
                     "Temperatura: \(model.temperatureType)",
+                    "Composición corporal: \(model.bodyCompositionType)",
+                    "Glucosa estimada: \(model.bloodGlucoseType)",
                     "Días retenidos: \(model.saveDays)",
                     "Firmware: " + (model.deviceVersion ?? "no disponible")
                 ]
@@ -123,7 +125,9 @@ final class VeepooCapabilityProbe: ObservableObject {
         switch category {
         case "oxygen": peripheral.veepooSdkStartReadDeviceOxygenData(progress)
         case "hrv": peripheral.veepooSdkStartReadDeviceHrvData(progress)
-        case "temperature": peripheral.veepooSdkStartReadDeviceTemperatureData(progress)
+        case "temperature":
+            if manager.peripheralModel?.temperatureType == 5 { peripheral.veepooSdkStartReadDeviceAllData(progress) }
+            else { peripheral.veepooSdkStartReadDeviceTemperatureData(progress) }
         case "activity": peripheral.veepooSDKStartReadDeviceRunningData(progress)
         default: peripheral.veepooSdkStartReadDeviceAllData(progress)
         }
@@ -157,7 +161,28 @@ final class VeepooCapabilityProbe: ObservableObject {
                  "sleepLine": model.sleepLine, "onePointDuration": model.onePointDuration,
                  "sleepDuration": model.sleepDuration, "accurateType": model.accurateType]
             }
-            days.append(["date": day,
+            let composition = VPDataBaseOperation.veepooSDKGetDeviceOffStoreBodyComposition(withDate: day, andTableID: address) ?? []
+            let bodies: [[String: Any]] = composition.map { model in
+                ["date": model.date, "testTime": model.testTime, "bodyFatPercentage": model.bodyFatPercentage,
+                 "leanBodyMass": model.leanBodyMass, "fatMass": model.fatMass,
+                 "muscleMass": model.muscleMass, "bodyMoisture": model.bodyMoisture]
+            }
+            let ecgs = VPDataBaseOperation.veepooSDKGetDeviceOffStoreECG(withDate: day, andTableID: address) ?? []
+            let traces: [[String: Any]] = ecgs.map { model in
+                ["date": model.date ?? "", "testTime": model.testTime ?? "", "type": model.type ?? "",
+                 "ecgType": model.ecgType ?? "", "duration": model.duration ?? "", "frequency": model.frequency ?? "",
+                 "uploadFrequency": model.uploadFrequency ?? "", "filterSignals": model.filterSignals ?? [],
+                 "originalSignals": model.originalSignals ?? [], "rrs": model.rrs ?? [], "qts": model.qts ?? []]
+            }
+            let analysis = VPDataBaseOperation.veepooSDKGetDeviceBloodAnalysisData(withDate: day, andTableID: address) ?? []
+            let estimates: [[String: Any]] = analysis.map { model in
+                ["time": model.time, "totalCholesterols": model.totalCholesterols,
+                 "triglycerides": model.triglycerides, "highDensityLipoproteins": model.highDensityLipoproteins,
+                 "lowDensityLipoproteins": model.lowDensityLipoproteins, "uricAcids": model.uricAcids]
+            }
+            days.append(["date": day, "bodyComposition": bodies, "ecgRawNotHealthKit": traces,
+                "bloodAnalysisEstimates": estimates,
+                "glucoseEstimates": VPDataBaseOperation.veepooSDKGetDeviceBloodGlucoseData(withDate: day, andTableID: address) ?? [],
                 "original": VPDataBaseOperation.veepooSDKGetOriginalData(withDate: day, andTableID: address) ?? [:],
                 "bloodPressureRawAmbiguousKeys": VPDataBaseOperation.veepooSDKGetBloodData(withDate: day, andTableID: address) ?? [],
                 "ordinarySleep": VPDataBaseOperation.veepooSDKGetSleepData(withDate: day, andTableID: address) ?? [],

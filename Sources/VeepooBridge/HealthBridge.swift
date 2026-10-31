@@ -44,7 +44,7 @@ import HealthKit
         isSyncing = true
         Task {
             defer { isSyncing = false }
-            var saved = 0, skipped = 0, errors = 0
+            var saved = 0, skipped = records.count - accepted.count, errors = 0
             for record in accepted {
                 guard isValid(record) else { skipped += 1; continue }
                 guard let sample = sample(for: record),
