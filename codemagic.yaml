@@ -37,3 +37,52 @@ workflows:
       - simulator-build.log
       - derived/Build/Products/Release-iphoneos/*.app
       - derived-simulator/Build/Products/Debug-iphonesimulator/*.app
+
+  ios-veepoo-sdk:
+    name: Veepoo Bridge - SDK real iPhone (unsigned)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+    scripts:
+      - name: Install tooling and fetch official Veepoo SDK
+        script: |
+          set -e
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          git clone --depth=1 https://github.com/HBandSDK/iOS_Ble_SDK.git /tmp/veepoo-vendor
+          mkdir -p Vendor
+          cp -R /tmp/veepoo-vendor/iOS_sdk_source/Framework/2.0.43.15/VeepooBleSDK.framework Vendor/
+          cp -R /tmp/veepoo-vendor/iOS_sdk_source/Demo/VeepooBleSDKDemo/VeepooBleSDKDemo/GRDFUSDK.framework Vendor/
+      - name: Configure Xcode project and vendor dependencies
+        script: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("project.yml")
+          s=p.read_text()
+          s=s.replace("    settings:\\n      base:\\n        PRODUCT_BUNDLE_IDENTIFIER:", "    dependencies:\\n      - framework: Vendor/VeepooBleSDK.framework\\n        embed: false\\n      - framework: Vendor/GRDFUSDK.framework\\n        embed: false\\n    settings:\\n      base:\\n        PRODUCT_BUNDLE_IDENTIFIER:")
+          p.write_text(s)
+          PY
+          xcodegen generate
+          cat > Podfile <<'PODS'
+          platform :ios, '17.0'
+          use_frameworks!
+          target 'VeepooHealthBridge' do
+            pod 'AFNetworking', '~> 4.0'
+            pod 'FMDB', '~> 2.7'
+            pod 'iOSDFULibrary'
+          end
+          PODS
+          pod install
+      - name: Compile app with actual Veepoo SDK for iPhone
+        script: |
+          set -o pipefail
+          xcodebuild -workspace VeepooHealthBridge.xcworkspace \\
+            -scheme VeepooHealthBridge \\
+            -configuration Release \\
+            -sdk iphoneos \\
+            -destination 'generic/platform=iOS' \\
+            -derivedDataPath "$CM_BUILD_DIR/derived-vendor" \\
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$CM_BUILD_DIR/vendor-build.log"
+    artifacts:
+      - vendor-build.log
+      - derived-vendor/Build/Products/Release-iphoneos/*.app
