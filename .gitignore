@@ -11,3 +11,6 @@ AuthKey_*.p8
 signed-validation/
 signed-entitlements.plist
 signed-profile.plist
+*.p8
+*.key
+*.pem

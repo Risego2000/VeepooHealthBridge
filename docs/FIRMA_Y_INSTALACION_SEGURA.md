@@ -1,3 +1,5 @@
+> Para la candidata 0.3, consulta `INSTALACION_IPHONE_0_3.md` y `INFORME_CANDIDATA_0_3.md`. Los enlaces siguientes conservan evidencia histórica.
+
 # Instalación en iPhone: límites y firma legítima
 
 Estado verificado: [compilación 41166329544](https://github.com/Risego2000/VeepooHealthBridge/actions/runs/41166329544) pasó compilación, verificación de las tres cadenas de privacidad y empaquetado de IPA **SIN FIRMA**. Esto NO constituye una instalación de iOS ni prueba BLE/HealthKit.
