@@ -3,8 +3,8 @@ import XCTest
 
 final class BridgeCoreTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1793404800)
-    func measurement(_ value: Double = 70) -> Measurement {
-        Measurement(id: "fixture", kind: .heartRate, value: value, start: now.addingTimeInterval(-600), end: now.addingTimeInterval(-600), source: "unit-test fixture", method: "fixture", validated: true)
+    func measurement(_ value: Double = 70) -> BridgeCore.Measurement {
+        BridgeCore.Measurement(id: "fixture", kind: .heartRate, value: value, start: now.addingTimeInterval(-600), end: now.addingTimeInterval(-600), source: "unit-test fixture", method: "fixture", validated: true)
     }
     func testRejectsNonFiniteAndOutOfRange() {
         for value in [Double.nan, Double.infinity, -1, 0, 241] {
@@ -53,4 +53,12 @@ final class BridgeCoreTests: XCTestCase {
         let d = VendorHistoryDecoder(device: "fixture", timeZone: TimeZone(secondsFromGMT: 0)!, now: now)
         XCTAssertTrue(d.temperature(day: "2026-10-30", rows: [["hour": 1.5, "minute": 0, "value": 36.5]]).isEmpty)
     }
+    func testStepsAreNonOverlappingWholeIntervals() {
+        let d = VendorHistoryDecoder(device: "fixture", timeZone: TimeZone(secondsFromGMT: 0)!, now: now)
+        let rows: [String: Any] = ["12:00": ["stepValue": 123], "12:30": ["stepValue": 45], "12:15": ["stepValue": 10], "13:00": ["stepValue": 2.5]]
+        let r = d.halfHourSteps(day: "2026-10-30", rows: rows).sorted { $0.start < $1.start }
+        XCTAssertEqual(r.count, 2); XCTAssertEqual(r[0].end, r[1].start)
+        XCTAssertEqual(r[0].value + r[1].value, 168)
+    }
+
 }

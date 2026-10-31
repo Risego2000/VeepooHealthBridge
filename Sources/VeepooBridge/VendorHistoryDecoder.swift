@@ -39,6 +39,15 @@ struct VendorHistoryDecoder {
         }
     }
 
+    /// Vendor documents each half-hour key as the start of a non-overlapping sum.
+    func halfHourSteps(day: String, rows: [String: Any]) -> [Measurement] {
+        rows.compactMap { time, fields in
+            guard let fields = fields as? [String: Any], let value = number(fields["stepValue"]),
+                  let start = date(day + " " + time), time.hasSuffix(":00") || time.hasSuffix(":30") else { return nil }
+            return sample(.steps, value, start, start.addingTimeInterval(1800), "SDK half-hour step sum")
+        }
+    }
+
     func oxygen(day: String, rows: [[String: Any]]) -> [Measurement] {
         rows.compactMap { row in
             guard let time = row["Time"] as? String, let instant = date(day + " " + time),

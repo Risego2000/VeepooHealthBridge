@@ -20,7 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test core with synthetic unit-test fixtures only
-        run: swift test --parallel
+        run: |
+          set -o pipefail
+          swift test --parallel 2>&1 | tee core-tests.log
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
@@ -39,6 +41,7 @@ jobs:
         with:
           name: ios-build-results
           path: |
+            core-tests.log
             build-simulator.log
             build-device.log
           if-no-files-found: ignore

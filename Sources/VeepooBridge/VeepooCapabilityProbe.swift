@@ -18,6 +18,8 @@ final class VeepooCapabilityProbe: ObservableObject {
 
     @Published private(set) var ready = false
     @Published private(set) var reading = false
+    @Published private(set) var archiveURL: URL?
+    private var operationID = UUID()
     @Published var automaticReconnect = true {
         didSet {
             #if canImport(VeepooBleSDK)
@@ -25,7 +27,10 @@ final class VeepooCapabilityProbe: ObservableObject {
             #endif
         }
     }
-    var recordingTimeZone = TimeZone.current
+    var recordingTimeZone: TimeZone {
+        get { TimeZone(identifier: UserDefaults.standard.string(forKey: "recordingTimeZone") ?? "") ?? .current }
+        set { UserDefaults.standard.set(newValue.identifier, forKey: "recordingTimeZone") }
+    }
 
     #if canImport(VeepooBleSDK)
     private let manager = VPBleCentralManage.sharedBleManager()
@@ -95,22 +100,85 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
     }
 
-    func readHistoryDiagnostic() {
+    func readHistoryDiagnostic() { readHistory(category: "basic") }
+
+    func readHistory(category: String) {
         guard !reading, ready, let manager, manager.isConnected,
               let peripheral = manager.peripheralManage else {
-            historyStatus = "No hay dispositivo conectado mediante Veepoo."
+            historyStatus = "Conecta y autentica el reloj; espera a terminar la operación actual."
             return
         }
         reading = true
         extractedMeasurements = []
-        historyStatus = "Solicitando historial mediante SDK…"
-        peripheral.veepooSdkStartReadDeviceAllData { [weak self] state, totalDays, currentDay, dayProgress in
+        let token = UUID()
+        operationID = token
+        historyStatus = "Solicitando historial: " + category
+        let progress: (VPReadDeviceBaseDataState, UInt, UInt, UInt) -> Void = { [weak self] state, total, current, percent in
             Task { @MainActor in
-                if state.rawValue == 2 || state.rawValue == 3 { self?.reading = false }
-                self?.historyStatus = "Lectura SDK: estado \(state), día \(currentDay)/\(totalDays), progreso \(dayProgress)%"
+                guard let self, self.operationID == token else { return }
+                self.historyStatus = "\(category): estado \(state.rawValue), día \(current)/\(total), \(percent)%"
+                if state.rawValue == 2 || state.rawValue == 3 { self.reading = false }
             }
         }
+        switch category {
+        case "oxygen": peripheral.veepooSdkStartReadDeviceOxygenData(progress)
+        case "hrv": peripheral.veepooSdkStartReadDeviceHrvData(progress)
+        case "temperature": peripheral.veepooSdkStartReadDeviceTemperatureData(progress)
+        case "activity": peripheral.veepooSDKStartReadDeviceRunningData(progress)
+        default: peripheral.veepooSdkStartReadDeviceAllData(progress)
+        }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 180_000_000_000)
+            guard let self, self.operationID == token, self.reading else { return }
+            // Disconnect before allowing a new command: the old SDK transfer may still be active.
+            self.disconnect()
+            self.historyStatus = "Tiempo de espera agotado. Se desconectó para cancelar la transferencia. Reconecta y reintenta."
+        }
     }
+
+    func exportSDKArchive() {
+        guard !reading, ready, let address = manager?.peripheralModel?.deviceAddress, !address.isEmpty else {
+            historyStatus = "Conecta el reloj y espera al fin de la lectura antes de archivar."
+            return
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = recordingTimeZone
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = recordingTimeZone
+        var days: [[String: Any]] = []
+        for offset in 0..<max(1, min(30, Int(manager?.peripheralModel?.saveDays ?? 0) + 1)) {
+            guard let instant = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
+            let day = formatter.string(from: instant)
+            let accurate = VPDataBaseOperation.veepooSDKGetAccurateSleepData(withDate: day, andTableID: address) ?? []
+            let sleep: [[String: Any]] = accurate.map { model in
+                ["sleepTime": model.sleepTime, "wakeTime": model.wakeTime,
+                 "sleepLine": model.sleepLine, "onePointDuration": model.onePointDuration,
+                 "sleepDuration": model.sleepDuration, "accurateType": model.accurateType]
+            }
+            days.append(["date": day,
+                "original": VPDataBaseOperation.veepooSDKGetOriginalData(withDate: day, andTableID: address) ?? [:],
+                "bloodPressureRawAmbiguousKeys": VPDataBaseOperation.veepooSDKGetBloodData(withDate: day, andTableID: address) ?? [],
+                "ordinarySleep": VPDataBaseOperation.veepooSDKGetSleepData(withDate: day, andTableID: address) ?? [],
+                "accurateSleep": sleep,
+                "oxygen": VPDataBaseOperation.veepooSDKGetDeviceOxygenData(withDate: day, andTableID: address) ?? [],
+                "hrvUnspecifiedMethod": VPDataBaseOperation.veepooSDKGetDeviceHrvData(withDate: day, andTableID: address) ?? [],
+                "temperature": VPDataBaseOperation.veepooSDKGetDeviceTemperatureData(withDate: day, andTableID: address) ?? [],
+                "activities": VPDataBaseOperation.veepooSDKGetDeviceRunningData(withDate: day, andTableID: address) ?? []])
+        }
+        let archive: [String: Any] = ["schemaVersion": 1, "device": address,
+            "firmware": manager?.peripheralModel?.deviceVersion ?? "unknown",
+            "timeZone": recordingTimeZone.identifier, "clinicalValidation": false, "days": days]
+        do {
+            let data = try JSONSerialization.data(withJSONObject: archive, options: [.prettyPrinted, .sortedKeys])
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Veepoo-SDK-private-archive.json")
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            archiveURL = url
+            historyStatus = "Archivo privado preparado. Contiene datos sanitarios brutos, no verificados."
+        } catch { historyStatus = "No se pudo crear el archivo privado: \(error.localizedDescription)" }
+    }
+
     func inspectSDKDatabase() {
         guard let address = manager?.peripheralModel?.deviceAddress, !address.isEmpty else {
             historyStatus = "No se conoce la dirección del reloj conectado."
@@ -151,6 +219,9 @@ final class VeepooCapabilityProbe: ObservableObject {
             if let rows = VPDataBaseOperation.veepooSDKGetOriginalData(withDate: day, andTableID: address) as? [String: Any] {
                 output += decoder.original(day: day, rows: rows)
             }
+            if let rows = VPDataBaseOperation.veepooSDKGetOriginalChangeHalfHourData(withDate: day, andTableID: address) as? [String: Any] {
+                output += decoder.halfHourSteps(day: day, rows: rows)
+            }
             if let rows = VPDataBaseOperation.veepooSDKGetDeviceOxygenData(withDate: day, andTableID: address) as? [[String: Any]] {
                 output += decoder.oxygen(day: day, rows: rows)
             }
@@ -167,6 +238,7 @@ final class VeepooCapabilityProbe: ObservableObject {
     }
 
     func disconnect() {
+        operationID = UUID()
         ready = false
         reading = false
         manager?.veepooSDKStopScanDevice()
@@ -177,6 +249,8 @@ final class VeepooCapabilityProbe: ObservableObject {
     #else
     init() {}
     func disconnect() {}
+    func readHistory(category: String) { historyStatus = "El SDK no está enlazado." }
+    func exportSDKArchive() { historyStatus = "El SDK no está enlazado." }
     func readHistoryDiagnostic() { historyStatus = "El SDK no está enlazado." }
     func inspectSDKDatabase() { historyStatus = "El SDK no está enlazado." }
     func extractHeartRatePreview() { historyStatus = "El SDK no está enlazado." }
