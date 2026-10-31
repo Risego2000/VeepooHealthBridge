@@ -25,6 +25,11 @@ struct ContentView: View {
             List {
                 Section("Diagnóstico") {
                     LabeledContent("Bluetooth", value: bluetooth.status)
+                    LabeledContent("Conexión A2", value: bluetooth.connectionStatus)
+                    if !bluetooth.services.isEmpty {
+                        Text("Servicios GATT: " + bluetooth.services.joined(separator: ", "))
+                            .font(.caption).textSelection(.enabled)
+                    }
                     LabeledContent("SDK Veepoo", value: "Adaptador pendiente")
                     LabeledContent("HealthKit", value: health.status)
                     Text("No se generan ni simulan mediciones. El escaneo no lee registros del reloj.")
@@ -39,6 +44,11 @@ struct ContentView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                }
+                Section("Prueba de conexión") {
+                    Button("Desconectar dispositivo") { bluetooth.disconnect() }
+                    Text("Esta prueba utiliza CoreBluetooth para descubrir servicios GATT. No reemplaza el protocolo Veepoo ni extrae datos de salud.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Historial local") {
                     LabeledContent("Registros", value: "\(measurements.records.count)")
