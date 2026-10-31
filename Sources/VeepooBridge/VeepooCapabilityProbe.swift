@@ -35,16 +35,16 @@ final class VeepooCapabilityProbe: ObservableObject {
         manager.veepooSDKConnectDevice(device) { [weak self] state in
             Task { @MainActor in
                 guard let self else { return }
-                self.status = "Estado de conexión SDK: \\(state)"
+                self.status = "Estado de conexión SDK: \(state)"
                 guard let model = self.manager.peripheralModel else { return }
                 self.capabilities = [
-                    "HRV: \\(model.hrvType)",
-                    "ECG: \\(model.ecgType)",
-                    "Sueño: \\(model.sleepType)",
-                    "Oxígeno: \\(model.oxygenType)",
-                    "Temperatura: \\(model.temperatureType)",
-                    "Días retenidos: \\(model.saveDays)",
-                    "Firmware: \\(model.deviceVersion ?? "no disponible")"
+                    "HRV: \(model.hrvType)",
+                    "ECG: \(model.ecgType)",
+                    "Sueño: \(model.sleepType)",
+                    "Oxígeno: \(model.oxygenType)",
+                    "Temperatura: \(model.temperatureType)",
+                    "Días retenidos: \(model.saveDays)",
+                    "Firmware: " + (model.deviceVersion ?? "no disponible")
                 ]
             }
         }
