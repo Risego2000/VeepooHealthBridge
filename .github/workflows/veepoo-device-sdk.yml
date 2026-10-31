@@ -1,0 +1,49 @@
+name: Veepoo SDK device integration check
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/veepoo-device-sdk.yml'
+permissions:
+  contents: read
+jobs:
+  integrate:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Obtain official vendor framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth=1 https://github.com/HBandSDK/iOS_Ble_SDK.git /tmp/veepoo-vendor
+          mkdir -p Vendor
+          cp -R /tmp/veepoo-vendor/iOS_sdk_source/Framework/2.0.43.15/VeepooBleSDK.framework Vendor/
+          file Vendor/VeepooBleSDK.framework/VeepooBleSDK
+          lipo -info Vendor/VeepooBleSDK.framework/VeepooBleSDK
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Inject framework into generated project
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('project.yml')
+          s=p.read_text()
+          s=s.replace('    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER:', '    dependencies:\n      - framework: Vendor/VeepooBleSDK.framework\n        embed: false\n    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER:')
+          p.write_text(s)
+          PY
+          xcodegen generate
+      - name: Compile actual SDK import for iOS device
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project VeepooHealthBridge.xcodeproj -scheme VeepooHealthBridge -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build 2>&1 | tee vendor-device-build.log
+      - name: Upload diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: veepoo-sdk-device-link-report
+          path: vendor-device-build.log
+          if-no-files-found: ignore
