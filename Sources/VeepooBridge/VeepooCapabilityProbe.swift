@@ -12,6 +12,7 @@ final class VeepooCapabilityProbe: ObservableObject {
     @Published private(set) var status = "SDK no enlazado"
     @Published private(set) var capabilities: [String] = []
     @Published private(set) var discovered: [String] = []
+    @Published private(set) var historyStatus = "Sin lectura iniciada"
 
     #if canImport(VeepooBleSDK)
     private let manager = VPBleCentralManage.sharedBleManager()
@@ -62,8 +63,23 @@ final class VeepooCapabilityProbe: ObservableObject {
             }
         }
     }
+
+    func readHistoryDiagnostic() {
+        guard let manager, manager.isConnected,
+              let peripheral = manager.peripheralManage else {
+            historyStatus = "No hay dispositivo conectado mediante Veepoo."
+            return
+        }
+        historyStatus = "Solicitando historial mediante SDK…"
+        peripheral.veepooSdkStartReadDeviceAllData { [weak self] state, totalDays, currentDay, dayProgress in
+            Task { @MainActor in
+                self?.historyStatus = "Lectura SDK: estado \(state), día \(currentDay)/\(totalDays), progreso \(dayProgress)%"
+            }
+        }
+    }
     #else
     init() {}
+    func readHistoryDiagnostic() { historyStatus = "El SDK no está enlazado." }
     func connect(index: Int) { status = "El SDK no está disponible en esta compilación." }
     func scan() {
         status = "No disponible: el framework VeepooBleSDK no está enlazado al target."
