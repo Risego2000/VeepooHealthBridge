@@ -34,6 +34,9 @@ struct ContentView: View {
                     }
                     LabeledContent("SDK Veepoo", value: veepoo.status)
                     Button("Buscar con SDK Veepoo") { veepoo.scan() }
+                    ForEach(Array(veepoo.discovered.enumerated()), id: \.offset) { index, label in
+                        Button("Conectar Veepoo: " + label) { veepoo.connect(index: index) }
+                    }
                     ForEach(veepoo.capabilities, id: \.self) { Text($0) }
                     LabeledContent("HealthKit", value: health.status)
                     Text("No se generan ni simulan mediciones. El escaneo no lee registros del reloj.")
