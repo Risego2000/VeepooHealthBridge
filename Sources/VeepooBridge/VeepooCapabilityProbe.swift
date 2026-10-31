@@ -143,10 +143,10 @@ final class VeepooCapabilityProbe: ObservableObject {
         case "oxygen": peripheral.veepooSdkStartReadDeviceOxygenData(progress)
         case "hrv": peripheral.veepooSdkStartReadDeviceHrvData(progress)
         case "temperature":
-            if manager.peripheralModel?.temperatureType == 5 { peripheral.veepooSdkStartReadDeviceAllData(progress) }
+            if manager.peripheralModel?.temperatureType == 5 { peripheral.veepooSdkStartReadDeviceAllData(readStateChange: progress) }
             else { peripheral.veepooSdkStartReadDeviceTemperatureData(progress) }
         case "activity": peripheral.veepooSDKStartReadDeviceRunningData(progress)
-        default: peripheral.veepooSdkStartReadDeviceAllData(progress)
+        default: peripheral.veepooSdkStartReadDeviceAllData(readStateChange: progress)
         }
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 180_000_000_000)
@@ -197,17 +197,20 @@ final class VeepooCapabilityProbe: ObservableObject {
                  "triglycerides": model.triglycerides, "highDensityLipoproteins": model.highDensityLipoproteins,
                  "lowDensityLipoproteins": model.lowDensityLipoproteins, "uricAcids": model.uricAcids]
             }
-            days.append(["date": day, "bodyComposition": bodies, "ecgRawNotHealthKit": traces,
-                "bloodAnalysisEstimates": estimates,
-                "glucoseEstimates": VPDataBaseOperation.veepooSDKGetDeviceBloodGlucoseData(withDate: day, andTableID: address) ?? [],
-                "original": VPDataBaseOperation.veepooSDKGetOriginalData(withDate: day, andTableID: address) ?? [:],
-                "bloodPressureRawAmbiguousKeys": VPDataBaseOperation.veepooSDKGetBloodData(withDate: day, andTableID: address) ?? [],
-                "ordinarySleep": VPDataBaseOperation.veepooSDKGetSleepData(withDate: day, andTableID: address) ?? [],
-                "accurateSleep": sleep,
-                "oxygen": VPDataBaseOperation.veepooSDKGetDeviceOxygenData(withDate: day, andTableID: address) ?? [],
-                "hrvUnspecifiedMethod": VPDataBaseOperation.veepooSDKGetDeviceHrvData(withDate: day, andTableID: address) ?? [],
-                "temperature": VPDataBaseOperation.veepooSDKGetDeviceTemperatureData(withDate: day, andTableID: address) ?? [],
-                "activities": VPDataBaseOperation.veepooSDKGetDeviceRunningData(withDate: day, andTableID: address) ?? []])
+            var entry: [String: Any] = ["date": day]
+            entry["bodyComposition"] = bodies
+            entry["ecgRawNotHealthKit"] = traces
+            entry["bloodAnalysisEstimates"] = estimates
+            entry["glucoseEstimates"] = VPDataBaseOperation.veepooSDKGetDeviceBloodGlucoseData(withDate: day, andTableID: address) ?? []
+            entry["original"] = VPDataBaseOperation.veepooSDKGetOriginalData(withDate: day, andTableID: address) ?? [:]
+            entry["bloodPressureRawAmbiguousKeys"] = VPDataBaseOperation.veepooSDKGetBloodData(withDate: day, andTableID: address) ?? []
+            entry["ordinarySleep"] = VPDataBaseOperation.veepooSDKGetSleepData(withDate: day, andTableID: address) ?? []
+            entry["accurateSleep"] = sleep
+            entry["oxygen"] = VPDataBaseOperation.veepooSDKGetDeviceOxygenData(withDate: day, andTableID: address) ?? []
+            entry["hrvUnspecifiedMethod"] = VPDataBaseOperation.veepooSDKGetDeviceHrvData(withDate: day, andTableID: address) ?? []
+            entry["temperature"] = VPDataBaseOperation.veepooSDKGetDeviceTemperatureData(withDate: day, andTableID: address) ?? []
+            entry["activities"] = VPDataBaseOperation.veepooSDKGetDeviceRunningData(withDate: day, andTableID: address) ?? []
+            days.append(entry)
         }
         let archive: [String: Any] = ["schemaVersion": 1, "device": address,
             "firmware": manager?.peripheralModel?.deviceVersion ?? "unknown",
