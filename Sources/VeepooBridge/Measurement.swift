@@ -49,3 +49,38 @@ struct ImportEnvelope: Codable {
     var device: String
     var measurements: [Measurement]
 }
+
+/// Structural and semantic checks shared by import, storage and HealthKit.
+enum MeasurementValidation {
+    static func accepts(_ m: Measurement, now: Date = Date()) -> Bool {
+        guard !m.id.isEmpty, m.id.utf8.count <= 512, !m.source.isEmpty,
+              m.source.count <= 160, m.method.count <= 256,
+              m.value.isFinite, m.end >= m.start,
+              m.start.timeIntervalSince1970 > 946684800, m.end <= now,
+              (m.note?.count ?? 0) <= 4096 else { return false }
+        switch m.kind {
+        case .heartRate: return (25...240).contains(m.value)
+        case .hrvSDNN: return m.method.lowercased() == "sdnn" && (1...300).contains(m.value)
+        case .steps: return (0...100000).contains(m.value) && m.value.rounded() == m.value && m.end > m.start
+        case .weightKg: return (10...350).contains(m.value)
+        case .bodyFatFraction: return (0...1).contains(m.value)
+        case .oxygenFraction: return (0.5...1).contains(m.value)
+        case .leanMassKg: return (1...250).contains(m.value)
+        case .bodyTemperatureC: return (30...44).contains(m.value)
+        case .systolic: return (60...260).contains(m.value)
+        case .diastolic: return (30...160).contains(m.value)
+        case .sleepAsleep: return m.end > m.start && m.end.timeIntervalSince(m.start) <= 86400
+        default: return false
+        }
+    }
+
+    static func merge(_ existing: [Measurement], incoming: [Measurement], now: Date = Date()) -> [Measurement] {
+        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { old, _ in old })
+        for var record in incoming where accepts(record, now: now) && byID[record.id] == nil {
+            // Trust is established inside the app, never by a JSON file or SDK callback.
+            record.validated = false
+            byID[record.id] = record
+        }
+        return byID.values.sorted { $0.start == $1.start ? $0.id < $1.id : $0.start > $1.start }
+    }
+}

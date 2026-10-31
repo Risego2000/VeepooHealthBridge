@@ -16,16 +16,39 @@ final class VeepooCapabilityProbe: ObservableObject {
     @Published private(set) var databaseSummary: [String] = []
     @Published private(set) var extractedMeasurements: [Measurement] = []
 
+    @Published private(set) var ready = false
+    @Published private(set) var reading = false
+    @Published var automaticReconnect = true {
+        didSet {
+            #if canImport(VeepooBleSDK)
+            manager?.automaticConnection = automaticReconnect
+            #endif
+        }
+    }
+    var recordingTimeZone = TimeZone.current
+
     #if canImport(VeepooBleSDK)
     private let manager = VPBleCentralManage.sharedBleManager()
     private var models: [VPPeripheralModel] = []
 
     init() {
         status = "VeepooBleSDK disponible: inicia búsqueda"
+        manager?.isLogEnable = false
+        manager?.automaticConnection = automaticReconnect
+        manager?.vpBleConnectStateChangeBlock = { [weak self] state in
+            Task { @MainActor in
+                guard let self else { return }
+                self.ready = state.rawValue == 2
+                if state.rawValue == 0 { self.reading = false; self.status = "Desconectado; reconexión según configuración" }
+                if state.rawValue == 3 { self.status = "Contraseña rechazada por el reloj" }
+            }
+        }
     }
 
     func scan() {
         status = "Buscando mediante SDK oficial"
+        guard !reading else { return }
+        manager?.veepooSDKStopScanDevice()
         models.removeAll()
         discovered.removeAll()
         guard let manager else { status = "Gestor Veepoo no inicializado"; return }
@@ -45,13 +68,19 @@ final class VeepooCapabilityProbe: ObservableObject {
 
     func connect(index: Int) {
         guard models.indices.contains(index) else { status = "Selecciona un dispositivo válido"; return }
+        ready = false
+        extractedMeasurements = []
+        databaseSummary = []
+        manager?.veepooSDKStopScanDevice()
+        manager?.automaticConnection = automaticReconnect
         let device = models[index]
         status = "Conectando mediante SDK Veepoo"
         guard let manager else { status = "Gestor Veepoo no inicializado"; return }
         manager.veepooSDKConnectDevice(device) { [weak self] state in
             Task { @MainActor in
                 guard let self else { return }
-                self.status = "Estado de conexión SDK: \(state)"
+                self.ready = state.rawValue == 4
+                self.status = self.ready ? "Conectado y contraseña verificada" : "Estado de conexión SDK: \(state)"
                 guard let model = self.manager?.peripheralModel else { return }
                 self.capabilities = [
                     "HRV: \(model.hrvType)",
@@ -67,14 +96,17 @@ final class VeepooCapabilityProbe: ObservableObject {
     }
 
     func readHistoryDiagnostic() {
-        guard let manager, manager.isConnected,
+        guard !reading, ready, let manager, manager.isConnected,
               let peripheral = manager.peripheralManage else {
             historyStatus = "No hay dispositivo conectado mediante Veepoo."
             return
         }
+        reading = true
+        extractedMeasurements = []
         historyStatus = "Solicitando historial mediante SDK…"
         peripheral.veepooSdkStartReadDeviceAllData { [weak self] state, totalDays, currentDay, dayProgress in
             Task { @MainActor in
+                if state.rawValue == 2 || state.rawValue == 3 { self?.reading = false }
                 self?.historyStatus = "Lectura SDK: estado \(state), día \(currentDay)/\(totalDays), progreso \(dayProgress)%"
             }
         }
@@ -103,38 +135,48 @@ final class VeepooCapabilityProbe: ObservableObject {
             historyStatus = "Conecta el reloj antes de extraer el historial."
             return
         }
-        let days = min(7, Int(manager?.peripheralModel?.saveDays ?? 0) + 1)
-        let dayFormatter = DateFormatter()
-        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dayFormatter.dateFormat = "yyyy-MM-dd"
-        dayFormatter.timeZone = .current
-        let dateTimeFormatter = DateFormatter()
-        dateTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateTimeFormatter.timeZone = .current
-        dateTimeFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+        guard ready, !reading else { historyStatus = "Espera a la autenticación y a finalizar la lectura"; return }
+        let decoder = VendorHistoryDecoder(device: address, timeZone: recordingTimeZone)
+        let days = max(1, min(30, Int(manager?.peripheralModel?.saveDays ?? 0) + 1))
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = recordingTimeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = recordingTimeZone
         var output: [Measurement] = []
         for offset in 0..<days {
-            guard let date = Calendar.current.date(byAdding: .day, value: -offset, to: Date()) else { continue }
-            let day = dayFormatter.string(from: date)
-            guard let original = VPDataBaseOperation.veepooSDKGetOriginalData(withDate: day, andTableID: address) as? [String: Any] else { continue }
-            for (time, fields) in original {
-                guard let data = fields as? [String: Any],
-                      let raw = data["heartValue"] as? NSNumber,
-                      let instant = dateTimeFormatter.date(from: day + " " + time) else { continue }
-                let bpm = raw.doubleValue
-                guard (25...240).contains(bpm), instant <= Date() else { continue }
-                let stableID = "veepoo-" + address + "-" + day + "-" + time + "-heart"
-                output.append(Measurement(id: stableID, kind: .heartRate, value: bpm,
-                    start: instant, end: instant, source: "Veepoo A2 " + address,
-                    method: "SDK original-data heartValue", validated: false,
-                    note: "Muestra del SDK; pendiente de contrastar con G Band antes de escribir en Salud."))
+            guard let instant = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
+            let day = formatter.string(from: instant)
+            if let rows = VPDataBaseOperation.veepooSDKGetOriginalData(withDate: day, andTableID: address) as? [String: Any] {
+                output += decoder.original(day: day, rows: rows)
+            }
+            if let rows = VPDataBaseOperation.veepooSDKGetDeviceOxygenData(withDate: day, andTableID: address) as? [[String: Any]] {
+                output += decoder.oxygen(day: day, rows: rows)
+            }
+            if let rows = VPDataBaseOperation.veepooSDKGetDeviceTemperatureData(withDate: day, andTableID: address) as? [[String: Any]] {
+                output += decoder.temperature(day: day, rows: rows)
+            }
+            if manager?.peripheralModel?.sleepType == 0,
+               let rows = VPDataBaseOperation.veepooSDKGetSleepData(withDate: day, andTableID: address) as? [[String: Any]] {
+                output += decoder.ordinarySleep(rows: rows)
             }
         }
-        extractedMeasurements = output.sorted { $0.start > $1.start }
-        historyStatus = "Extraídas \(output.count) muestras de frecuencia cardíaca no verificadas. No enviadas a Salud."
+        extractedMeasurements = MeasurementValidation.merge([], incoming: output)
+        historyStatus = "Extraídas \(extractedMeasurements.count) muestras sin verificar. Coteja zona horaria, fechas y unidades antes de Salud."
     }
+
+    func disconnect() {
+        ready = false
+        reading = false
+        manager?.veepooSDKStopScanDevice()
+        manager?.veepooSDKDisconnectDevice()
+        status = "Desconectado por el usuario"
+    }
+
     #else
     init() {}
+    func disconnect() {}
     func readHistoryDiagnostic() { historyStatus = "El SDK no está enlazado." }
     func inspectSDKDatabase() { historyStatus = "El SDK no está enlazado." }
     func extractHeartRatePreview() { historyStatus = "El SDK no está enlazado." }

@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
       - 'project.yml'
       - 'Info.plist'
       - 'VeepooHealthBridge.entitlements'
@@ -17,6 +19,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: Test core with synthetic unit-test fixtures only
+        run: swift test --parallel
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project

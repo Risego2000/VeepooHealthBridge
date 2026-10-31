@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import Charts
 
 @main struct VeepooHealthBridgeApp: App {
     @StateObject private var bluetooth = BluetoothScanner()
@@ -17,6 +18,7 @@ struct ContentView: View {
     @EnvironmentObject var veepoo: VeepooCapabilityProbe
     @EnvironmentObject var health: HealthBridge
     @EnvironmentObject var measurements: MeasurementStore
+    @AppStorage("recordingTimeZone") private var recordingZone = TimeZone.current.identifier
     @State private var importing = false
     @State private var exportURL: URL?
     @State private var showDeleteConfirmation = false
@@ -34,10 +36,12 @@ struct ContentView: View {
                     }
                     LabeledContent("SDK Veepoo", value: veepoo.status)
                     Button("Buscar con SDK Veepoo") { veepoo.scan() }
-                    Button("Leer historial con SDK (diagnóstico)") { veepoo.readHistoryDiagnostic() }
+                    Button("Leer historial con SDK") { veepoo.readHistoryDiagnostic() }
+                        .disabled(!veepoo.ready || veepoo.reading)
+                    Button("Desconectar SDK") { veepoo.disconnect() }
                     Text(veepoo.historyStatus).font(.caption)
                     Button("Inspeccionar datos guardados por SDK") { veepoo.inspectSDKDatabase() }
-                    Button("Extraer pulsaciones a vista previa local") { veepoo.extractHeartRatePreview() }
+                    Button("Extraer métricas documentadas a vista previa") { veepoo.extractHeartRatePreview() }
                     Button("Guardar vista previa sin validar") { measurements.addSDKPreview(veepoo.extractedMeasurements) }
                         .disabled(veepoo.extractedMeasurements.isEmpty)
                     Text("Muestras extraídas: \(veepoo.extractedMeasurements.count). No se envían a Salud sin verificación.")
@@ -50,11 +54,20 @@ struct ContentView: View {
                     Text("No se generan ni simulan mediciones. El escaneo no lee registros del reloj.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                Section("Configuración") {
+                    Toggle("Reconectar mediante SDK tras pérdida de señal", isOn: $veepoo.automaticReconnect)
+                    Picker("Zona horaria de las mediciones", selection: $recordingZone) {
+                        ForEach(TimeZone.knownTimeZoneIdentifiers, id: \.self) { Text($0).tag($0) }
+                    }
+                    Text("Selecciona la zona donde el reloj registró los datos. Los cambios de zona y la hora repetida de otoño requieren cotejo manual.")
+                        .font(.caption)
+                }
+                Section("Gráficos") { MeasurementChart(records: measurements.records) }
                 Section("Relojes Bluetooth próximos") {
                     Button(bluetooth.scanning ? "Detener búsqueda" : "Buscar dispositivos") { bluetooth.toggleScan() }
                     ForEach(bluetooth.devices) { device in
                         VStack(alignment: .leading) {
-                            Text(device.name).font(.headline)
+                            Button(device.name) { bluetooth.connect(to: device.id) }.font(.headline)
                             Text("RSSI \(device.rssi) dBm · \(device.id.uuidString)")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
@@ -77,6 +90,9 @@ struct ContentView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(record.kind.title).font(.headline)
                             Text("\(record.value.formatted()) · \(record.start.formatted())")
+                            if !record.validated {
+                                Button("He cotejado esta muestra: verificar") { measurements.verify(id: record.id) }
+                            }
                             Text("\(record.source) · \(record.method) · \(record.validated ? "verificado" : "no verificado")")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
@@ -87,7 +103,7 @@ struct ContentView: View {
                     Button("Solicitar permisos") { health.requestPermissions() }
                     Toggle("Confirmo que he verificado los registros antes de transferir", isOn: $confirmedForHealth)
                     Button("Sincronizar registros verificados") { health.sync(measurements.records) }
-                        .disabled(!confirmedForHealth || measurements.records.isEmpty)
+                        .disabled(!confirmedForHealth || measurements.records.isEmpty || health.isSyncing)
                     Text(health.lastResults)
                     Text("El ECG y las estimaciones de glucosa, ácido úrico y lípidos NO se escriben en HealthKit. HRV solo se transfiere si el método es SDNN.")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -98,12 +114,36 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("Veepoo Health Bridge")
+            .onAppear { veepoo.recordingTimeZone = TimeZone(identifier: recordingZone) ?? .current }
+            .onChange(of: recordingZone) { _, zone in
+                veepoo.recordingTimeZone = TimeZone(identifier: zone) ?? .current
+            }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
                 if case .success(let url) = result { measurements.importJSON(url) }
             }
             .confirmationDialog("¿Borrar los registros almacenados por Bridge?", isPresented: $showDeleteConfirmation) {
                 Button("Borrar", role: .destructive) { measurements.deleteAll() }
             } message: { Text("No elimina datos de G Band ni Salud de Apple.") }
+        }
+    }
+}
+
+struct MeasurementChart: View {
+    let records: [Measurement]
+    @State private var kind = Measurement.Kind.heartRate
+    var body: some View {
+        VStack {
+            Picker("Métrica", selection: $kind) {
+                ForEach(Measurement.Kind.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            let samples = Array(records.filter { $0.kind == kind }.prefix(500)).sorted { $0.start < $1.start }
+            if samples.isEmpty { Text("Sin datos de esta métrica") }
+            else {
+                Chart(samples) { sample in
+                    PointMark(x: .value("Fecha", sample.start), y: .value("Valor", sample.value))
+                }.frame(height: 180)
+                Text("Hasta 500 muestras recientes. Oxígeno y grasa en fracción 0–1; temperatura en °C; pulsaciones en lpm.").font(.caption)
+            }
         }
     }
 }

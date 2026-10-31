@@ -4,6 +4,7 @@ import HealthKit
 @MainActor final class HealthBridge: ObservableObject {
     @Published private(set) var status = "Sin comprobar"
     @Published private(set) var lastResults = "Sin transferencia"
+    @Published private(set) var isSyncing = false
     private let store = HKHealthStore()
     private let origin = "Veepoo Health Bridge"
 
@@ -36,14 +37,18 @@ import HealthKit
     }
 
     func sync(_ records: [Measurement]) {
+        guard !isSyncing else { return }
         guard HKHealthStore.isHealthDataAvailable() else { lastResults = "HealthKit no disponible"; return }
         // Require explicit per-sample validation; never publish speculative biomarkers.
         let accepted = records.filter { $0.validated && $0.kind.writable && $0.source != "demo" }
+        isSyncing = true
         Task {
+            defer { isSyncing = false }
             var saved = 0, skipped = 0, errors = 0
             for record in accepted {
                 guard isValid(record) else { skipped += 1; continue }
-                guard let sample = sample(for: record) else { skipped += 1; continue }
+                guard let sample = sample(for: record),
+                      store.authorizationStatus(for: sample.sampleType) == .sharingAuthorized else { skipped += 1; continue }
                 do {
                     if try await alreadySaved(id: record.id, type: sample.sampleType, date: record.start) { skipped += 1; continue }
                     try await save(sample)
@@ -55,19 +60,7 @@ import HealthKit
     }
 
     private func isValid(_ m: Measurement) -> Bool {
-        guard m.end >= m.start else { return false }
-        switch m.kind {
-        case .hrvSDNN: return m.method.lowercased() == "sdnn" && (1...300).contains(m.value)
-        case .heartRate: return (25...240).contains(m.value)
-        case .steps: return (0...100000).contains(m.value)
-        case .weightKg: return (10...350).contains(m.value)
-        case .bodyFatFraction, .oxygenFraction: return (0...1).contains(m.value)
-        case .leanMassKg: return (1...250).contains(m.value)
-        case .bodyTemperatureC: return (30...44).contains(m.value)
-        case .systolic, .diastolic: return (40...260).contains(m.value)
-        case .sleepAsleep: return m.end > m.start
-        default: return false
-        }
+        MeasurementValidation.accepts(m)
     }
 
     private func sample(for m: Measurement) -> HKSample? {

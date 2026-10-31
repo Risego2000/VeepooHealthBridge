@@ -20,7 +20,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth=1 https://github.com/HBandSDK/iOS_Ble_SDK.git /tmp/veepoo-vendor
+          git clone https://github.com/HBandSDK/iOS_Ble_SDK.git /tmp/veepoo-vendor
+          git -C /tmp/veepoo-vendor checkout c1ec1363c659deaa483778315b86e680f8f81af0
           mkdir -p Vendor
           cp -R /tmp/veepoo-vendor/iOS_sdk_source/Framework/2.0.43.15/VeepooBleSDK.framework Vendor/
           cp -R /tmp/veepoo-vendor/iOS_sdk_source/Demo/VeepooBleSDKDemo/VeepooBleSDKDemo/GRDFUSDK.framework Vendor/

@@ -1,0 +1,10 @@
+.build/
+Vendor/
+Pods/
+derived*/
+*.xcworkspace/
+*.xcodeproj/
+*.p12
+*.mobileprovision
+AuthKey_*.p8
+*.ipa
