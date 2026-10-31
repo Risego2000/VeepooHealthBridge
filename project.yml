@@ -13,6 +13,12 @@ targets:
       - path: Sources/VeepooBridge
     info:
       path: Info.plist
+      properties:
+        CFBundleDisplayName: Veepoo Bridge
+        NSBluetoothAlwaysUsageDescription: Buscar y conectar el reloj A2 de forma local.
+        NSHealthUpdateUsageDescription: Escribir en Salud de Apple las mediciones verificadas y autorizadas por ti.
+        NSHealthShareUsageDescription: Consultar los registros autorizados para evitar duplicados.
+        UILaunchScreen: {}
     entitlements:
       path: VeepooHealthBridge.entitlements
     settings:
