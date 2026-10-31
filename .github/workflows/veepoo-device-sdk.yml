@@ -33,7 +33,7 @@ jobs:
           from pathlib import Path
           p=Path('project.yml')
           s=p.read_text()
-          s=s.replace('    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER:', '    dependencies:\n      - framework: Vendor/VeepooBleSDK.framework\n        embed: false\n    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER:')
+          s=s.replace('    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER:', '    dependencies:\n      - framework: Vendor/VeepooBleSDK.framework\n        embed: false\n      - framework: Vendor/GRDFUSDK.framework\n        embed: false\n    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER:')
           p.write_text(s)
           PY
           xcodegen generate
