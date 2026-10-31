@@ -1,0 +1,35 @@
+name: Veepoo SDK inventory
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout vendor SDK
+        run: git clone --depth=1 https://github.com/HBandSDK/iOS_Ble_SDK.git vendor
+      - name: List frameworks and module definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "== SDK HEAD =="
+          git -C vendor rev-parse HEAD
+          echo "== Frameworks =="
+          find vendor/iOS_sdk_source/Framework -maxdepth 6 \( -name '*.framework' -o -name '*.xcframework' -o -name '*.modulemap' -o -name '*.h' \) -print | head -180
+          echo "== Binary architectures =="
+          find vendor/iOS_sdk_source/Framework -type f | while IFS= read -r file; do
+            case "$(file -b "$file")" in
+              *Mach-O*) echo "$file"; lipo -info "$file" || true ;;
+            esac
+          done
+          echo "== README =="
+          cat vendor/README.md
+      - name: Upload SDK manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: veepoo-sdk-inventory
+          path: vendor/README.md
+          if-no-files-found: ignore
