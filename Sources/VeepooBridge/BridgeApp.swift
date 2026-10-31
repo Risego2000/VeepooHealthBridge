@@ -25,7 +25,7 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $tab) {
             DashboardView().tabItem { Label("Salud", systemImage: "heart.text.square.fill") }.tag("home")
-            DeviceView().tabItem { Label("Dispositivo", systemImage: "applewatch") }.tag("device")
+            NavigationStack { DeviceView() }.tabItem { Label("Dispositivo", systemImage: "applewatch") }.tag("device")
             ProfileView().tabItem { Label("Perfil", systemImage: "person.crop.circle") }.tag("settings")
         }
         .onChange(of: veepoo.historyRevision) { _, _ in
@@ -277,7 +277,6 @@ struct DeviceView: View {
     @EnvironmentObject var measurements: MeasurementStore
     @EnvironmentObject var bluetooth: BluetoothScanner
     var body: some View {
-        NavigationStack {
             List {
                 Section {
                     Label(veepoo.ready ? "Reloj preparado" : "Conecta tu reloj", systemImage: "applewatch.radiowaves.left.and.right").font(.title3.bold())
@@ -321,7 +320,6 @@ struct DeviceView: View {
                 .sheet(isPresented: $showingRawArchive) {
                     if let url = veepoo.archiveURL { RawArchiveView(url: url) }
                 }
-        }
     }
 }
 
@@ -333,7 +331,6 @@ struct HistoryView: View {
     @State private var deleting = false
     @State private var verifying: Measurement?
     var body: some View {
-        NavigationStack {
             List {
                 Section("Tendencias") { MeasurementChart(records: measurements.records) }
                 Section("Muestras recientes · \(measurements.records.count)") {
@@ -391,7 +388,6 @@ struct HistoryView: View {
                         }.navigationTitle("Revisar muestra").toolbar { Button("Cerrar") { verifying = nil } }
                     }
                 }
-        }
     }
 }
 
@@ -401,7 +397,6 @@ struct HealthView: View {
     @State private var consent = false
     @AppStorage("syncVerifiedAutomatically") private var syncAutomatically = false
     var body: some View {
-        NavigationStack {
             List {
                 Section {
                     Image(systemName: "heart.text.square.fill").font(.system(size: 54)).foregroundStyle(.pink).padding(.vertical, 12)
@@ -429,7 +424,6 @@ struct HealthView: View {
                     Text("La deduplicación identifica registros de Bridge. No garantiza detectar copias que otra app haya enviado con identificadores distintos.")
                 }.font(.footnote)
             }.navigationTitle("Salud de Apple")
-        }
     }
 }
 
@@ -438,7 +432,6 @@ struct SettingsView: View {
     @EnvironmentObject var bluetooth: BluetoothScanner
     @AppStorage("recordingTimeZone") private var zone = TimeZone.current.identifier
     var body: some View {
-        NavigationStack {
             Form {
                 Section("Conexión") {
                     Toggle("Reconexión automática con el SDK", isOn: $veepoo.automaticReconnect)
@@ -473,7 +466,6 @@ struct SettingsView: View {
             }.navigationTitle("Ajustes")
                 .onAppear { veepoo.recordingTimeZone = TimeZone(identifier: zone) ?? .current }
                 .onChange(of: zone) { _, value in veepoo.recordingTimeZone = TimeZone(identifier: value) ?? .current }
-        }
     }
 }
 
