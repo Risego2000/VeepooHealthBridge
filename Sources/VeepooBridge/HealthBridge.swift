@@ -6,6 +6,7 @@ import HealthKit
     @Published private(set) var lastResults = "Sin transferencia"
     @Published private(set) var isSyncing = false
     private let store = HKHealthStore()
+    private var pendingRecords: [Measurement]?
     @Published private(set) var details: [String] = []
 
     private var typeMapping: [(Measurement.Kind, HKQuantityTypeIdentifier, HKUnit, Double)] {
@@ -41,14 +42,20 @@ import HealthKit
     }
 
     func sync(_ records: [Measurement]) {
-        guard !isSyncing else { return }
+        guard !isSyncing else { pendingRecords = records; return }
         guard HKHealthStore.isHealthDataAvailable() else { lastResults = "HealthKit no disponible"; return }
         // Require explicit per-sample validation; never publish speculative biomarkers.
         let accepted = records.filter { $0.validated && $0.kind.writable && $0.source != "demo" }
         isSyncing = true
         details = []
         Task {
-            defer { isSyncing = false }
+            defer {
+                isSyncing = false
+                if let queued = pendingRecords {
+                    pendingRecords = nil
+                    sync(queued)
+                }
+            }
             var saved = 0, skipped = records.count - accepted.count, errors = 0
             for record in accepted {
                 guard isValid(record) else {
