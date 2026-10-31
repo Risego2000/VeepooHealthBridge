@@ -17,3 +17,5 @@ La compilación oficial de dispositivo pasa a Release. Las pruebas añaden contr
 Los requisitos de cuenta, firma, perfil HealthKit y distribución son independientes de esos límites. No se ha accedido al expediente Apple. La ausencia de una prueba con hardware no se etiqueta como problema pendiente de Apple.
 
 Fuentes: https://developer.apple.com/documentation/healthkit/hkelectrocardiogramtype y https://developer.apple.com/documentation/technotes/tn3115-bluetooth-state-restoration-app-relaunch-rules
+
+Se incorpora la API oficial readManualTestData(withTimestamp:dataType:result:), pidiendo únicamente la máscara supportManualTestType anunciada. El resultado manual queda disponible en el archivo privado y en su visor durante la sesión; no se declaran conversiones a Salud de sus campos sin unidades confirmadas. La cobertura comprende solo los modelos reconocidos por el esquema de cabeceras fijado; clases desconocidas se identifican explícitamente. No hay prueba física de esta API en A2.

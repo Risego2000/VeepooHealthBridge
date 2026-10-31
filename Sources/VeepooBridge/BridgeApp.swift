@@ -114,6 +114,8 @@ struct DeviceView: View {
                 } header: { Text("Conexión oficial SDK") } footer: { Text("Libera la conexión de G Band antes de buscar. El SDK verifica la contraseña del reloj antes de permitir la lectura.") }
                 Section("Recuperar mediciones") {
                     Button("Leer historial del reloj", systemImage: "arrow.down.circle") { veepoo.readHistoryDiagnostic() }.disabled(!veepoo.ready || veepoo.reading)
+                    Button("Leer mediciones manuales del reloj") { veepoo.readManualHistory() }
+                        .disabled(!veepoo.ready || veepoo.reading)
                     Menu("Lecturas adicionales por capacidad") {
                         Button("Oxígeno") { veepoo.readHistory(category: "oxygen") }
                         Button("HRV original, sin convertir a SDNN") { veepoo.readHistory(category: "hrv") }

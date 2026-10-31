@@ -38,6 +38,27 @@ final class VeepooCapabilityProbe: ObservableObject {
     private let manager = VPBleCentralManage.sharedBleManager()
     private var models: [VPPeripheralModel] = []
     private var connectionWanted = false
+    private var manualRecords: [String: Any] = [:]
+    private let manualSchema: [String: [String]] = [
+        "VPManualHealthGlanceModel": ["timestamp", "heartRate", "bloodOxygen", "stress", "fatigueLevel", "bloodSugar", "haveLevel", "bloodSugarLevel", "bodyTemperature", "orgTemperature", "h_bp", "l_bp", "hrv", "emotionLevel", "healthGlanceId", "protocol", "functionSupport", "totalCholesterol", "triglyceride", "highDensityLipoprotein", "lowDensityLipoprotein", "uricAcid", "cuffBloodPressureHigh", "cuffBloodPressureLow", "bodyComModel", "weight", "height", "age", "gender", "skinMoisture", "depressionRisk", "snsActivation", "cortisolValue"],
+        "VPManualEmotionModel": ["timestamp", "value"],
+        "VPManualHeartRateModel": ["timestamp", "heartArray"],
+        "VPManualBloodSugarModel": ["timestamp", "bloodSugarValue", "haveLevel", "bloodSugarLevel"],
+        "VPManualHGBodyComModel": ["bmi", "bodyFatPercentage", "fatMass", "leanBodyMass", "muscleRate", "muscleMass", "subcutaneousFat", "bodyMoisture", "waterContent", "skeletalMuscleRate", "boneMass", "proportionOfProtein", "proteinAmount", "basalMetabolicRate"],
+        "VPManualStressModel": ["timestamp", "value"],
+        "VPManualBloodPressureModel": ["timestamp", "testModel", "protocol", "heart", "h_bp", "l_bp", "state", "credibility", "height", "weight", "age", "sex"],
+        "VPManualFatigueLevelModel": ["timestamp", "value"],
+        "VPManualMeasurementMicroTestModel": ["timestamp", "heartRate", "bloodOxygen", "pressure", "bloodSugar", "bodyTemperature", "skinTemperature", "systolicBloodPressure", "diastolicBloodPressure", "hrv"],
+        "VPManualTestDataModel": ["mac", "bloodPressureArr", "bodyTempArr", "bloodCompArr", "heartRateArr", "bloodOxygenArr", "bloodSugarArr", "healthGlanceArr", "hrvArr", "gsrArr", "emotionArr", "fatigueLevelArr", "stressArr", "metArr"],
+        "VPManualHRVModel": ["timestamp", "hrvArray"],
+        "VPManualBloodCompModel": ["timestamp", "totalCholesterol", "triglyceride", "highDensityLipoprotein", "lowDensityLipoprotein", "uricAcid"],
+        "VPManualBloodOxygenModel": ["timestamp", "bloodOxygenArray"],
+        "VPManualMetModel": ["timestamp", "value"],
+        "VPManualBodyTempModel": ["timestamp", "bodyTemp", "origTemp"],
+        "VPManualGSRModel": ["timestamp", "emotionLevel", "skinMoisture", "depressionRisk", "snsActivation", "cortisolValue"],
+        "VPHealthGlanceTestModel": ["heartRate", "bloodOxygen", "stress", "fatigueLevel", "bloodSugar", "bloodSugarType", "bloodSugarLevel", "bodyTemperature", "orgTemperature", "systolicBloodPressure", "diastolicBloodPressure", "hrv", "ppgBloodPressureHigh", "ppgBloodPressureLow", "cuffBloodPressureHigh", "cuffBloodPressureLow", "totalCholesterol", "triglyceride", "highDensityLipoprotein", "lowDensityLipoprotein", "uricAcid", "functionSupport", "weight", "height", "age", "gender", "bmi", "bodyFatPercentage", "fatMass", "leanBodyMass", "muscleRate", "muscleMass", "subcutaneousFat", "bodyMoisture", "waterContent", "skeletalMuscleRate", "boneMass", "proportionOfProtein", "proteinAmount", "basalMetabolicRate", "emotionLevel", "skinMoisture", "depressionRisk", "snsActivation", "cortisolValue"],
+        "VPBodyCompositionValueModel": ["date", "testTime", "isDeviceTest", "stature", "weight", "gender", "bmi", "bodyFatPercentage", "fatMass", "leanBodyMass", "muscleRate", "muscleMass", "subcutaneousFat", "bodyMoisture", "waterContent", "skeletalMuscleRate", "boneMass", "proportionOfProtein", "proteinAmount", "basalMetabolicRate"]
+    ]
 
     init() {
         status = "VeepooBleSDK disponible: inicia búsqueda"
@@ -110,6 +131,46 @@ final class VeepooCapabilityProbe: ObservableObject {
                 ]
             }
         }
+    }
+
+    func readManualHistory() {
+        guard ready, !reading, let peripheral = manager?.peripheralManage,
+              let address = manager?.peripheralModel?.deviceAddress,
+              peripheral.supportManualTestType.rawValue != 0 else {
+            historyStatus = "El dispositivo no anuncia historial manual disponible o está ocupado"; return
+        }
+        reading = true
+        let token = UUID(); operationID = token
+        historyStatus = "Leyendo categorías manuales anunciadas por el dispositivo…"
+        peripheral.readManualTestData(withTimestamp: 0, dataType: peripheral.supportManualTestType) { [weak self] model in
+            Task { @MainActor in
+                guard let self, self.operationID == token else { return }
+                self.reading = false
+                guard let model else { self.historyStatus = "El SDK no devolvió mediciones manuales"; return }
+                self.manualRecords[address] = self.manualJSON(model)
+                self.historyStatus = "Historial manual recibido. Prepara el archivo privado para examinar sus categorías; sin envío automático a Salud de campos sin unidades confirmadas."
+            }
+        }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 180_000_000_000)
+            guard let self, self.operationID == token, self.reading else { return }
+            self.disconnect(); self.historyStatus = "Lectura manual agotada. Reconecta y reintenta."
+        }
+    }
+
+    private func manualJSON(_ value: Any) -> Any {
+        if let array = value as? [Any] { return array.map { manualJSON($0) } }
+        if let dictionary = value as? [String: Any] { return dictionary.mapValues { manualJSON($0) } }
+        if value is String || value is NSNumber || value is NSNull { return value }
+        if let data = value as? Data { return ["encoding": "base64", "data": data.base64EncodedString()] }
+        if let model = value as? NSObject {
+            let name = String(describing: type(of: model)).components(separatedBy: ".").last ?? ""
+            if let keys = manualSchema[name] {
+                return snapshot(model, keys: keys).mapValues { manualJSON($0) }
+            }
+            return ["unhandledSDKClass": name]
+        }
+        return NSNull()
     }
 
     func supports(_ category: String) -> Bool {
@@ -229,7 +290,7 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
         let archive: [String: Any] = ["schemaVersion": 1, "device": address,
             "firmware": manager?.peripheralModel?.deviceVersion ?? "unknown",
-            "timeZone": recordingTimeZone.identifier, "clinicalValidation": false, "days": days]
+            "timeZone": recordingTimeZone.identifier, "clinicalValidation": false, "days": days, "manualMeasurements": manualRecords[address] ?? [:]]
         do {
             let data = try JSONSerialization.data(withJSONObject: archive, options: [.prettyPrinted, .sortedKeys])
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("Veepoo-SDK-private-archive.json")
@@ -324,6 +385,7 @@ final class VeepooCapabilityProbe: ObservableObject {
 
     #else
     init() {}
+    func readManualHistory() { historyStatus = "El SDK no está enlazado." }
     func disconnect() {}
     func readHistory(category: String) { historyStatus = "El SDK no está enlazado." }
     func exportSDKArchive() { historyStatus = "El SDK no está enlazado." }
