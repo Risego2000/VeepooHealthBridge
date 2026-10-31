@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/veepoo-device-sdk.yml'
+      - 'Sources/**'
 permissions:
   contents: read
 jobs:
