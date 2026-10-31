@@ -1,0 +1,39 @@
+workflows:
+  ios-diagnostic:
+    name: Veepoo Bridge - iOS validation (unsigned)
+    max_build_duration: 45
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        script: |
+          xcodegen generate
+      - name: Compile for iPhone (unsigned, diagnostic only)
+        script: |
+          set -o pipefail
+          xcodebuild -project VeepooHealthBridge.xcodeproj \
+            -scheme VeepooHealthBridge \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$CM_BUILD_DIR/derived" \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$CM_BUILD_DIR/ios-build.log"
+      - name: Compile iOS Simulator
+        script: |
+          set -o pipefail
+          xcodebuild -project VeepooHealthBridge.xcodeproj \
+            -scheme VeepooHealthBridge \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$CM_BUILD_DIR/derived-simulator" \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$CM_BUILD_DIR/simulator-build.log"
+    artifacts:
+      - ios-build.log
+      - simulator-build.log
+      - derived/Build/Products/Release-iphoneos/*.app
+      - derived-simulator/Build/Products/Debug-iphonesimulator/*.app
