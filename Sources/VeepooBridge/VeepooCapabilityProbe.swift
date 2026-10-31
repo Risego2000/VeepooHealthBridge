@@ -14,6 +14,7 @@ final class VeepooCapabilityProbe: ObservableObject {
     @Published private(set) var discovered: [String] = []
     @Published private(set) var historyStatus = "Sin lectura iniciada"
     @Published private(set) var databaseSummary: [String] = []
+    @Published private(set) var extractedMeasurements: [Measurement] = []
 
     #if canImport(VeepooBleSDK)
     private let manager = VPBleCentralManage.sharedBleManager()
@@ -95,10 +96,48 @@ final class VeepooCapabilityProbe: ObservableObject {
         }
         historyStatus = "Diagnóstico local disponible. Ninguna medición se ha enviado a HealthKit."
     }
+    /// Convert only documented timestamped heart-rate samples, without declaring clinical validation.
+    /// The SDK labels original-data fields heartValue and keys as local HH:mm timestamps.
+    func extractHeartRatePreview() {
+        guard let address = manager?.peripheralModel?.deviceAddress, !address.isEmpty else {
+            historyStatus = "Conecta el reloj antes de extraer el historial."
+            return
+        }
+        let days = min(7, Int(manager?.peripheralModel?.saveDays ?? 0) + 1)
+        let dayFormatter = DateFormatter()
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.dateFormat = "yyyy-MM-dd"
+        dayFormatter.timeZone = .current
+        let dateTimeFormatter = DateFormatter()
+        dateTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateTimeFormatter.timeZone = .current
+        dateTimeFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+        var output: [Measurement] = []
+        for offset in 0..<days {
+            guard let date = Calendar.current.date(byAdding: .day, value: -offset, to: Date()) else { continue }
+            let day = dayFormatter.string(from: date)
+            guard let original = VPDataBaseOperation.veepooSDKGetOriginalData(withDate: day, andTableID: address) as? [String: Any] else { continue }
+            for (time, fields) in original {
+                guard let data = fields as? [String: Any],
+                      let raw = data["heartValue"] as? NSNumber,
+                      let instant = dateTimeFormatter.date(from: day + " " + time) else { continue }
+                let bpm = raw.doubleValue
+                guard (25...240).contains(bpm), instant <= Date() else { continue }
+                let stableID = "veepoo-" + address + "-" + day + "-" + time + "-heart"
+                output.append(Measurement(id: stableID, kind: .heartRate, value: bpm,
+                    start: instant, end: instant, source: "Veepoo A2 " + address,
+                    method: "SDK original-data heartValue", validated: false,
+                    note: "Muestra del SDK; pendiente de contrastar con G Band antes de escribir en Salud."))
+            }
+        }
+        extractedMeasurements = output.sorted { $0.start > $1.start }
+        historyStatus = "Extraídas \(output.count) muestras de frecuencia cardíaca no verificadas. No enviadas a Salud."
+    }
     #else
     init() {}
     func readHistoryDiagnostic() { historyStatus = "El SDK no está enlazado." }
     func inspectSDKDatabase() { historyStatus = "El SDK no está enlazado." }
+    func extractHeartRatePreview() { historyStatus = "El SDK no está enlazado." }
     func connect(index: Int) { status = "El SDK no está disponible en esta compilación." }
     func scan() {
         status = "No disponible: el framework VeepooBleSDK no está enlazado al target."
