@@ -59,7 +59,10 @@ workflows:
           from pathlib import Path
           p=Path("project.yml")
           s=p.read_text()
-          s=s.replace("    settings:\\n      base:\\n        PRODUCT_BUNDLE_IDENTIFIER:", "    dependencies:\\n      - framework: Vendor/VeepooBleSDK.framework\\n        embed: false\\n      - framework: Vendor/GRDFUSDK.framework\\n        embed: false\\n    settings:\\n      base:\\n        PRODUCT_BUNDLE_IDENTIFIER:")
+          marker = "    settings:" + chr(10) + "      base:" + chr(10) + "        PRODUCT_BUNDLE_IDENTIFIER:"
+          replacement = "    dependencies:" + chr(10) + "      - framework: Vendor/VeepooBleSDK.framework" + chr(10) + "        embed: false" + chr(10) + "      - framework: Vendor/GRDFUSDK.framework" + chr(10) + "        embed: false" + chr(10) + marker
+          assert marker in s, "Target settings marker not found"
+          s = s.replace(marker, replacement, 1)
           p.write_text(s)
           PY
           xcodegen generate
@@ -76,12 +79,12 @@ workflows:
       - name: Compile app with actual Veepoo SDK for iPhone
         script: |
           set -o pipefail
-          xcodebuild -workspace VeepooHealthBridge.xcworkspace \\
-            -scheme VeepooHealthBridge \\
-            -configuration Release \\
-            -sdk iphoneos \\
-            -destination 'generic/platform=iOS' \\
-            -derivedDataPath "$CM_BUILD_DIR/derived-vendor" \\
+          xcodebuild -workspace VeepooHealthBridge.xcworkspace \
+            -scheme VeepooHealthBridge \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$CM_BUILD_DIR/derived-vendor" \
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$CM_BUILD_DIR/vendor-build.log"
     artifacts:
       - vendor-build.log
