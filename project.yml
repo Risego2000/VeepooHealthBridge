@@ -1,0 +1,22 @@
+name: VeepooHealthBridge
+options:
+  bundleIdPrefix: org.veepoobridge
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    IPHONEOS_DEPLOYMENT_TARGET: '17.0'
+targets:
+  VeepooHealthBridge:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/VeepooBridge
+    info:
+      path: Info.plist
+    entitlements:
+      path: VeepooHealthBridge.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.veepoobridge.ios
+        TARGETED_DEVICE_FAMILY: '1'
+        CODE_SIGN_STYLE: Automatic
